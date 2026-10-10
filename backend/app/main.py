@@ -1179,7 +1179,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             db.close()
 
     @app.get("/api/devices/{device_id}/gallery")
-    async def api_gallery(request: Request, device_id: str, cursor: str | None = None, limit: int = 60):
+    async def api_gallery(request: Request, device_id: str, cursor: str | None = None, limit: int = 200, album: str | None = None):
         auth = require_api_owner(request)
         if isinstance(auth, JSONResponse):
             return auth
@@ -1194,7 +1194,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             result = await registry.command(
                 device_id,
                 P.LIST_GALLERY,
-                {"cursor": cursor, "limit": max(1, min(limit, 100))},
+                {"cursor": cursor, "limit": max(1, min(limit, 200)), "album": album},
             )
             return {"ok": True, **(result.get("data") or result)}
         except DeviceOffline:
@@ -1336,6 +1336,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             db.close()
         transfer_id = str(uuid.uuid4())
+        offset = 0
+        requested_length = None
+        range_header = request.headers.get("range")
+        if range_header:
+            import re
+            match = re.fullmatch(r"bytes=(\d+)-(\d*)", range_header.strip())
+            if match is None:
+                return json_error("Only a single start-based byte range is supported", "INVALID_RANGE", 416)
+            offset = int(match.group(1))
+            if match.group(2):
+                end = int(match.group(2))
+                if end < offset:
+                    return json_error("Invalid byte range", "INVALID_RANGE", 416)
+                requested_length = end - offset + 1
         try:
             transfer = await registry.open_transfer(device_id, transfer_id)
             await registry.send_json(
@@ -1343,7 +1357,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 P.envelope(
                     P.DOWNLOAD_FILE,
                     device_id,
-                    {"file_id": file, "transfer_id": transfer_id},
+                    {"file_id": file, "transfer_id": transfer_id, "offset": offset, **({"length": requested_length} if requested_length is not None else {})},
                     transfer_id,
                 ),
             )
@@ -1358,35 +1372,52 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return json_error("Empty file", "NOT_FOUND", 404)
 
             async def generate():
+                delivered = 0
                 try:
                     if first_bytes:
+                        delivered += len(first_bytes)
                         yield first_bytes
                     while True:
                         item = await _wait_queue_item(transfer, timeout=settings.DOWNLOAD_TIMEOUT_SECONDS)
                         if item is None:
+                            expected = meta.get("size")
+                            if isinstance(expected, int) and delivered != expected:
+                                raise RuntimeError("Incomplete device file transfer")
                             break
                         if isinstance(item, dict):
                             continue
                         if isinstance(item, (bytes, bytearray)):
+                            delivered += len(item)
                             yield bytes(item)
                 finally:
                     registry.close_transfer(device_id, transfer_id)
 
             mime = str(meta.get("mime") or "application/octet-stream")
             disposition = content_disposition(str(meta.get("name") or "download"))
-            if inline and mime.startswith("image/"):
+            if inline and (mime.startswith("image/") or mime.startswith("video/") or mime == "application/pdf"):
                 disposition = disposition.replace("attachment;", "inline;", 1)
-            headers = {"Content-Disposition": disposition}
+            headers = {"Content-Disposition": disposition, "Cache-Control": "private, no-store", "X-Accel-Buffering": "no", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox"}
             size = meta.get("size")
+            total_size = meta.get("total_size", size)
+            if isinstance(total_size, int) and total_size >= 0:
+                headers["Accept-Ranges"] = "bytes"
             if isinstance(size, int) and size >= 0:
                 headers["Content-Length"] = str(size)
-            return StreamingResponse(generate(), media_type=mime, headers=headers)
+            if range_header:
+                if not isinstance(total_size, int) or not isinstance(size, int) or size <= 0 or meta.get("offset") != offset:
+                    registry.close_transfer(device_id, transfer_id)
+                    return json_error("Device cannot serve this byte range; update the phone app", "INVALID_RANGE", 416)
+                headers["Content-Range"] = f"bytes {offset}-{offset + size - 1}/{total_size}"
+            return StreamingResponse(generate(), status_code=206 if range_header else 200, media_type=mime, headers=headers)
+        except asyncio.TimeoutError:
+            registry.close_transfer(device_id, transfer_id)
+            return json_error("Phone did not start the file transfer in time", "TIMEOUT", 504)
         except DeviceOffline:
             registry.close_transfer(device_id, transfer_id)
             return json_error("Device offline", "DEVICE_OFFLINE", 409)
         except CommandError as exc:
             registry.close_transfer(device_id, transfer_id)
-            return json_error(exc.message, exc.code, 400)
+            return json_error(exc.message, exc.code, 416 if exc.code == "INVALID_RANGE" else 400)
 
     # ----- websockets -----
     @app.websocket("/ws/device")
@@ -1414,7 +1445,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 elif message.get("bytes") is not None:
                     link = state.get("link")
                     if link is not None:
-                        registry.handle_binary(link, message["bytes"])
+                        await registry.handle_binary(link, message["bytes"])
         except WebSocketDisconnect:
             pass
         except Exception:
@@ -1724,7 +1755,7 @@ async def _handle_device_text(websocket: WebSocket, data: dict, state: dict, Ses
             db.close()
         return
 
-    registry.handle_text(link, data)
+    await registry.handle_text(link, data)
 
 
 def _b64url_decode(value: str) -> bytes:
@@ -1749,6 +1780,8 @@ def _verify_chat_identity(contact_id: str, public_key: str, signature: str, chal
 async def _wait_queue_item(transfer, timeout: float):
     import asyncio
 
+    if transfer.error is not None:
+        raise transfer.error
     item = await asyncio.wait_for(transfer.queue.get(), timeout)
     if isinstance(item, CommandError):
         raise item

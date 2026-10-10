@@ -487,14 +487,11 @@ internal fun AffiliateSettings() {
             runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))) }
                 .onFailure { context.startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
         }
-        SettingsTitle("Screen Viewer")
-        SettingsRow(Icons.Rounded.Visibility, "Enable Screen Viewer", "Enable the view-only Accessibility service; no screenshots are saved") {
-            context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
-        SettingsTitle("Redeem"); SettingsRow(Icons.Rounded.QrCode2, "Redeem Code", if (app.store.paired) "Connected securely" else "One-time reward code") { showDashboard = !showDashboard }
+        RemoteAccessSetup()
+        SettingsTitle("Dashboard pairing"); SettingsRow(Icons.Rounded.QrCode2, "Pair my dashboard", if (app.store.paired) "Dashboard paired" else "Code grants dashboard access to permitted phone files") { showDashboard = !showDashboard }
         if (showDashboard) {
             if (app.store.paired) { PremiumCard(Modifier.fillMaxWidth()) { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Dashboard connected", style = MaterialTheme.typography.titleMedium); Text("Regenerate only when you want to replace the current dashboard connection.", color = MaterialTheme.colorScheme.onSurfaceVariant); OutlinedButton(onClick = { app.store.regeneratePairingToken(); app.socket.disconnect(false); app.socket.retryNow(); dashboardGeneration++ }) { Text("Regenerate Dashboard Code") } } } }
-            else { val code = remember(app.store.pairingToken, dashboardGeneration) { app.store.pairingToken }; PremiumCard(Modifier.fillMaxWidth()) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) { Text("One-Time Reward Redeem Code", style = MaterialTheme.typography.titleMedium); Text(code, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); OutlinedButton(onClick = { clipboard.setText(AnnotatedString(code)); haptic.performHapticFeedback(HapticFeedbackType.LongPress); Toast.makeText(context, "Redeem code copied", Toast.LENGTH_SHORT).show() }) { Text("Copy Redeem Code") } } } }
+            else { val code = remember(app.store.pairingToken, dashboardGeneration) { app.store.pairingToken }; PremiumCard(Modifier.fillMaxWidth()) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) { Text("Dashboard Pairing Code", style = MaterialTheme.typography.titleMedium); Text(code, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); OutlinedButton(onClick = { clipboard.setText(AnnotatedString(code)); haptic.performHapticFeedback(HapticFeedbackType.LongPress); Toast.makeText(context, "Dashboard pairing code copied", Toast.LENGTH_SHORT).show() }) { Text("Copy Dashboard Pairing Code") } } } }
         }
         SettingsTitle("App Information"); PremiumCard(Modifier.fillMaxWidth()) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("Affiliate", style = MaterialTheme.typography.titleLarge); Text("Software Version  ${BuildConfig.VERSION_NAME}"); Text("Build Number  ${BuildConfig.VERSION_CODE}") } }
         SettingsTitle("Logout"); SettingsRow(Icons.Rounded.Logout, "Logout", "Sign out securely") { app.affiliateAccount.logout() }

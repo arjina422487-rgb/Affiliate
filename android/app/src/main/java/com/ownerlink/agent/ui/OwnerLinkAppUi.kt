@@ -21,7 +21,9 @@ import com.ownerlink.agent.service.ConnectionService
 fun OwnerLinkAppUi() {
     val app = OwnerLinkApp.instance
     val auth by app.affiliateAccount.state.collectAsState()
-    LaunchedEffect(Unit) { ConnectionService.start(app) }
+    LaunchedEffect(Unit) {
+        if (app.store.remoteAccessConsent && app.store.serviceWanted) ConnectionService.start(app)
+    }
     Surface(Modifier.fillMaxSize().safeDrawingPadding(), color = MaterialTheme.colorScheme.background) {
         when (val state = auth) {
             AffiliateAuthState.Checking -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

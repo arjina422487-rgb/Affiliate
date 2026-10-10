@@ -52,79 +52,70 @@ class GalleryRepository(private val context: Context) {
         }
     }
 
-    fun list(cursor: String?, limit: Int): JsonObject {
-        if (!Permissions.hasMedia(context)) {
-            return buildJsonObject {
-                put("ok", false)
-                put("code", "PERMISSION_MISSING")
-                put("message", "Photos and videos permission is not granted on the phone.")
-            }
+    fun list(cursor: String?, limit: Int, album: String? = null): JsonObject {
+        if (!Permissions.hasMedia(context)) return buildJsonObject {
+            put("ok", false); put("code", "PERMISSION_MISSING")
+            put("message", "Allow shared media access on the phone to browse its albums.")
         }
-        val items = ArrayList<JsonObject>()
         val uri = MediaStore.Files.getContentUri("external")
-        val projection = arrayOf(
-            MediaStore.Files.FileColumns._ID,
-            MediaStore.Files.FileColumns.DISPLAY_NAME,
-            MediaStore.Files.FileColumns.MIME_TYPE,
-            MediaStore.Files.FileColumns.SIZE,
-            MediaStore.Files.FileColumns.WIDTH,
-            MediaStore.Files.FileColumns.HEIGHT,
-            MediaStore.Files.FileColumns.DATE_ADDED,
-            MediaStore.Files.FileColumns.MEDIA_TYPE,
-        )
-        val selection = StringBuilder(
-            "(${MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${MediaStore.Files.FileColumns.MEDIA_TYPE}=?)",
-        )
-        val args = mutableListOf(
-            MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
-            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
-        )
-        val after = cursor?.toLongOrNull()
-        if (after != null) {
-            selection.append(" AND ${MediaStore.Files.FileColumns._ID} < ?")
-            args.add(after.toString())
+        val mediaSelection = "(${MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${MediaStore.Files.FileColumns.MEDIA_TYPE}=?)"
+        val mediaArgs = arrayOf(MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(), MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString())
+        val albums = linkedMapOf<String, AlbumCount>()
+        if (cursor == null) {
+            context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.Files.FileColumns.MEDIA_TYPE), mediaSelection, mediaArgs, null)?.use { c ->
+                while (c.moveToNext()) {
+                    val path = c.getString(0).orEmpty()
+                    val count = albums.getOrPut(path) { AlbumCount() }
+                    if (c.getInt(1) == MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE) count.images++ else count.videos++
+                }
+            } ?: error("Android could not read the media index")
         }
-        val sort = "${MediaStore.Files.FileColumns._ID} DESC"
-        context.contentResolver.query(uri, projection, selection.toString(), args.toTypedArray(), sort)?.use { c ->
-            val idIx = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
-            val nameIx = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DISPLAY_NAME)
-            val mimeIx = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MIME_TYPE)
-            val sizeIx = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.SIZE)
-            val wIx = c.getColumnIndex(MediaStore.Files.FileColumns.WIDTH)
-            val hIx = c.getColumnIndex(MediaStore.Files.FileColumns.HEIGHT)
-            val dateIx = c.getColumnIndex(MediaStore.Files.FileColumns.DATE_ADDED)
-            val typeIx = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
-            var n = 0
-            while (c.moveToNext() && n < limit) {
-                val id = c.getLong(idIx)
-                val mediaType = c.getInt(typeIx)
-                items.add(
-                    buildJsonObject {
-                        put("id", FileIds.encodeGallery(id))
-                        put("name", c.getString(nameIx) ?: "media")
-                        put("mime", c.getString(mimeIx) ?: "")
-                        put("size", c.getLong(sizeIx))
-                        if (wIx >= 0) put("width", c.getInt(wIx))
-                        if (hIx >= 0) put("height", c.getInt(hIx))
-                        if (dateIx >= 0) put("taken_at", c.getLong(dateIx))
-                        put("is_video", mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO)
-                    },
-                )
-                n++
+        val selection = StringBuilder(mediaSelection)
+        val args = mediaArgs.toMutableList()
+        if (album != null) {
+            if (album.isEmpty()) selection.append(" AND (${MediaStore.MediaColumns.RELATIVE_PATH} IS NULL OR ${MediaStore.MediaColumns.RELATIVE_PATH}='')")
+            else { selection.append(" AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?"); args.add(album) }
+        }
+        cursor?.toLongOrNull()?.let { selection.append(" AND ${MediaStore.Files.FileColumns._ID} < ?"); args.add(it.toString()) }
+        val projection = arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.DISPLAY_NAME,
+            MediaStore.Files.FileColumns.MIME_TYPE, MediaStore.Files.FileColumns.SIZE,
+            MediaStore.Files.FileColumns.MEDIA_TYPE, MediaStore.MediaColumns.RELATIVE_PATH)
+        val items = ArrayList<JsonObject>()
+        val pageSize = limit.coerceIn(1, 200)
+        var hasMore = false
+        var lastId: Long? = null
+        context.contentResolver.query(uri, projection, selection.toString(), args.toTypedArray(), "${MediaStore.Files.FileColumns._ID} DESC")?.use { c ->
+            while (c.moveToNext()) {
+                if (items.size == pageSize) { hasMore = true; break }
+                val id = c.getLong(0)
+                lastId = id
+                items.add(buildJsonObject {
+                    put("id", FileIds.encodeGallery(id)); put("name", c.getString(1) ?: "media")
+                    put("mime", c.getString(2).orEmpty()); put("size", c.getLong(3))
+                    put("is_video", c.getInt(4) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO)
+                    put("album", c.getString(5).orEmpty())
+                })
             }
-        }
-        val hasMore = items.size >= limit
-        val cursorOut = if (hasMore && items.isNotEmpty()) {
-            val encoded = items.last()["id"]!!.jsonPrimitive.content
-            val ref = FileIds.decode(encoded) as com.ownerlink.agent.files.FileRef.Gallery
-            ref.mediaId.toString()
-        } else null
+        } ?: error("Android could not read this album")
         return buildJsonObject {
-            put("items", JsonArray(items))
-            put("has_more", hasMore)
-            if (cursorOut != null) put("cursor", cursorOut)
+            put("items", JsonArray(items)); put("has_more", hasMore)
+            if (hasMore && lastId != null) put("cursor", lastId.toString())
+            if (cursor == null) {
+                put("total_images", albums.values.sumOf { it.images })
+                put("total_videos", albums.values.sumOf { it.videos })
+                put("albums", JsonArray(albums.entries.sortedBy { it.key.lowercase() }.map { (path, count) ->
+                    buildJsonObject {
+                        put("id", path); put("path", path)
+                        put("name", path.trimEnd('/').substringAfterLast('/').ifEmpty { "Other" })
+                        put("images", count.images); put("videos", count.videos)
+                        put("count", count.images + count.videos)
+                    }
+                }))
+            }
         }
     }
+
+    private data class AlbumCount(var images: Long = 0, var videos: Long = 0)
 
     fun thumbnailJpeg(mediaId: Long): ByteArray {
         val uri = ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), mediaId)

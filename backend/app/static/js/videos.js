@@ -14,7 +14,7 @@
     const card=document.createElement("button"); card.type="button"; card.className="thumb";
     const img=document.createElement("img"); img.loading="lazy"; img.alt=item.name||"video"; img.src=thumbUrl(item);
     const label=document.createElement("span"); label.textContent=`${item.name} · ${duration(item.duration_ms)} · ${size(item.size||0)}`;
-    card.append(img,label); card.addEventListener("click",()=>{ player.src=downloadUrl(item); document.getElementById("video-download").href=downloadUrl(item); document.getElementById("video-download").download=item.name||"video"; dialog.showModal(); player.play().catch(()=>{}); });
+    card.append(img,label); card.addEventListener("click",()=>{ player.src=downloadUrl(item)+"&inline=true"; document.getElementById("video-download").href=downloadUrl(item); document.getElementById("video-download").download=item.name||"video"; OwnerLink.bindDownload(document.getElementById("video-download"),downloadUrl(item),item,status); dialog.showModal(); player.play().catch(()=>{}); });
     grid.appendChild(card);
   }
   async function load() { if(loading)return; loading=true; status.textContent="Loading videos…"; try { const q=cursor?`&cursor=${encodeURIComponent(cursor)}`:""; const data=await OwnerLink.api(`/api/devices/${id}/videos?limit=40${q}`); (data.items||[]).forEach(add); cursor=data.cursor||null; more.classList.toggle("hidden",!data.has_more); status.textContent=grid.children.length?"":"No accessible videos found."; } catch(e){status.textContent=e.message;} finally{loading=false;} }

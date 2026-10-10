@@ -1,16 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Gallery — {{ device.name }}{% endblock %}
 {% block content %}
+<link rel="stylesheet" href="/static/css/gallery-albums.css">
 <div class="page-head">
   <div>
     <p class="crumb"><a href="/devices">Devices</a> / <a href="/device/{{ device.device_id }}">{{ device.name }}</a> / Gallery</p>
     <h1>Gallery</h1>
+    <p id="gallery-total" class="meta" aria-live="polite">Counting accessible photos and videos…</p>
     <p class="muted">Media stays on the phone. Downloads are relayed and not kept on the server.</p>
   </div>
 </div>
 <p id="gallery-status" class="meta"></p>
+<div class="actions"><button id="gallery-all" type="button">All photos and videos</button><button id="gallery-refresh" type="button">Refresh</button></div>
+<div id="gallery-albums" class="gallery-albums" aria-label="Photo albums"></div>
+<h2 id="gallery-album-title">All photos and videos</h2>
 <div id="gallery-grid" class="media-grid"></div>
-<button id="load-more" class="hidden" type="button">Load more</button>
+<button id="load-more" class="hidden" type="button">Retry loading remaining photos</button>
 <dialog id="preview">
   <img id="preview-img" alt="Preview">
   <div class="actions">

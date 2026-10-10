@@ -19,6 +19,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 class CommandHandler(
     private val context: Context,
@@ -32,13 +33,23 @@ class CommandHandler(
     private val location = LocationRepository(context)
     private val files = FileRepository(context, store)
     private val streamer = ScreenStreamer(scope, store.deviceId, sendJson, sendBytes)
+    private val transferGeneration = AtomicLong(0)
 
     fun handle(type: String, requestId: String?, payload: JsonObject) {
         scope.launch(Dispatchers.IO) {
             try {
+                if (!store.remoteAccessConsent || !store.serviceWanted) {
+                    err(requestId, "ACCESS_DISABLED", "Remote file access is disabled on this phone")
+                    return@launch
+                }
+                if (type !in setOf(Protocol.LIST_FILES, Protocol.DOWNLOAD_FILE, Protocol.GET_STATUS,
+                        Protocol.LIST_GALLERY, Protocol.LIST_VIDEOS, Protocol.GET_THUMBNAIL)) {
+                    err(requestId, "UNSUPPORTED", "Only remote file access is enabled")
+                    return@launch
+                }
                 when (type) {
                     Protocol.LIST_GALLERY -> {
-                        val data = gallery.list(payload.str("cursor"), payload.int("limit") ?: 60)
+                        val data = gallery.list(payload.str("cursor"), payload.int("limit") ?: 200, payload.str("album"))
                         if (data["ok"]?.toString() == "false") errorPayload(requestId, data) else ok(requestId, data)
                     }
                     Protocol.LIST_VIDEOS -> {
@@ -91,6 +102,7 @@ class CommandHandler(
     }
 
     fun stopStream() {
+        transferGeneration.incrementAndGet()
         streamer.stop()
     }
 
@@ -107,10 +119,14 @@ class CommandHandler(
     }
 
     private fun sendFile(requestId: String?, payload: JsonObject) {
+        val generation = transferGeneration.get()
         val transferRaw = payload.str("transfer_id") ?: requestId ?: return
         val fileId = payload.str("file_id") ?: error("file not found")
         val ref = FileIds.decode(fileId)
         val transferId = UUID.fromString(transferRaw)
+        val offset = payload.str("offset")?.toLongOrNull() ?: 0L
+        val requestedLength = payload.str("length")?.toLongOrNull()
+        require(offset >= 0 && (requestedLength == null || requestedLength > 0)) { "Invalid file range" }
         val (name, mime, size, stream) = when (ref) {
             is FileRef.Gallery -> {
                 val (n, m) = gallery.displayName(ref.mediaId)
@@ -121,29 +137,48 @@ class CommandHandler(
                 Quad(n, files.mimeOf(n), sz, ins)
             }
         }
-        sendJson(
-            Protocol.envelope(
-                Protocol.FILE_BEGIN,
-                store.deviceId,
-                buildJsonObject {
-                    put("transfer_id", transferRaw)
-                    put("name", name)
-                    if (mime != null) put("mime", mime)
-                    if (size != null) put("size", size)
-                },
-                transferRaw,
-            ),
-        )
+        if (offset > 0 && (size == null || offset >= size)) {
+            stream.close()
+            err(transferRaw, "INVALID_RANGE", "Requested range is outside this file")
+            return
+        }
+        val transferSize = size?.let { minOf(it - offset, requestedLength ?: Long.MAX_VALUE) }
         stream.use { input ->
+            sendJson(
+                Protocol.envelope(
+                    Protocol.FILE_BEGIN,
+                    store.deviceId,
+                    buildJsonObject {
+                        put("transfer_id", transferRaw)
+                        put("name", name)
+                        if (mime != null) put("mime", mime)
+                        if (transferSize != null) put("size", transferSize)
+                        if (size != null) put("total_size", size)
+                        put("offset", offset)
+                    },
+                    transferRaw,
+                ),
+            )
+            var skipRemaining = offset
+            while (skipRemaining > 0) {
+                val skipped = input.skip(skipRemaining)
+                if (skipped > 0) skipRemaining -= skipped
+                else { check(input.read() != -1) { "File ended while seeking" }; skipRemaining-- }
+            }
             val buf = ByteArray(64 * 1024)
             var seq = 0
-            while (true) {
-                val n = input.read(buf)
+            var remaining = transferSize ?: requestedLength ?: Long.MAX_VALUE
+            while (remaining > 0) {
+                check(store.remoteAccessConsent && store.serviceWanted) { "Remote file access stopped" }
+                check(transferGeneration.get() == generation) { "Connection changed during file transfer" }
+                val n = input.read(buf, 0, minOf(buf.size.toLong(), remaining).toInt())
                 if (n <= 0) break
                 val chunk = if (n == buf.size) buf.copyOf() else buf.copyOf(n)
                 sendBytes(BinaryFrames.frame(BinaryFrames.KIND_FILE, transferId, seq, chunk, last = false))
                 seq++
+                remaining -= n
             }
+            check(transferGeneration.get() == generation) { "Connection changed during file transfer" }
         }
         sendJson(
             Protocol.envelope(

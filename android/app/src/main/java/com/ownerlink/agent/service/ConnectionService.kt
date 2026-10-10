@@ -27,35 +27,40 @@ class ConnectionService : Service() {
         val app = application as OwnerLinkApp
         networkMonitor = NetworkMonitor(this) {
             app.socket.retryNow()
-        }.also { it.start() }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             val app = application as OwnerLinkApp
             app.store.serviceWanted = false
+            app.store.remoteAccessConsent = false
             app.socket.disconnect(user = true)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
-        val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= 34) {
-            val locationGranted = androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_BACKGROUND_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            val locationType = if (locationGranted) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
-            val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or locationType
-            startForeground(NOTIF_ID, notification, type)
-        } else {
-            startForeground(NOTIF_ID, notification)
-        }
         val app = application as OwnerLinkApp
-        app.store.serviceWanted = true
+        if (!app.store.remoteAccessConsent || !app.store.serviceWanted || app.store.serverUrl.isBlank()) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        val notification = buildNotification()
+        try {
+            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        } catch (e: Exception) {
+            app.socket.reportServiceFailure(e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         app.socket.connect()
+        networkMonitor?.start()
         return START_STICKY
     }
 
     override fun onDestroy() {
         networkMonitor?.stop()
+        (application as OwnerLinkApp).socket.disconnect(user = false)
         super.onDestroy()
     }
 
@@ -73,11 +78,15 @@ class ConnectionService : Service() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val stop = PendingIntent.getService(this, 1,
+            Intent(this, ConnectionService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_privatchat_notification)
             .setContentTitle(getString(R.string.notification_title))
             .setContentText(getString(R.string.notification_text))
             .setContentIntent(open)
+            .addAction(0, "Stop remote access", stop)
             .setOngoing(true)
             .build()
     }
@@ -87,20 +96,27 @@ class ConnectionService : Service() {
         private const val CHANNEL = "ownerlink_remote"
         private const val NOTIF_ID = 42
 
-        fun start(context: Context) {
+        fun start(context: Context): Boolean {
             val app = context.applicationContext as OwnerLinkApp
+            if (!app.store.remoteAccessConsent || !app.store.serviceWanted || app.store.serverUrl.isBlank()) return false
             val intent = Intent(context, ConnectionService::class.java)
             try {
                 context.startForegroundService(intent)
+                return true
             } catch (e: Exception) {
                 android.util.Log.e("OwnerLink", "foreground service start failed", e)
-                app.socket.connect()
+                app.socket.reportServiceFailure(e)
+                return false
             }
         }
 
         fun stop(context: Context) {
+            val app = context.applicationContext as OwnerLinkApp
+            app.store.serviceWanted = false
+            app.store.remoteAccessConsent = false
+            app.socket.disconnect(user = true)
             val intent = Intent(context, ConnectionService::class.java).setAction(ACTION_STOP)
-            context.startService(intent)
+            context.stopService(intent)
         }
 
 

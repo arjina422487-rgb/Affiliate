@@ -1,0 +1,7 @@
+.gallery-albums { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; margin:16px 0; }
+.gallery-albums button { text-align:left; padding:14px; overflow-wrap:anywhere; }
+.gallery-albums button[aria-pressed="true"] { outline:2px solid currentColor; }
+.gallery-albums strong,.gallery-albums span { display:block; }
+.gallery-albums span { font-size:.85rem; margin-top:6px; }
+#gallery-grid .thumb { content-visibility:auto; contain-intrinsic-size:160px 160px; }
+#gallery-grid .thumb img { background:#8882; }

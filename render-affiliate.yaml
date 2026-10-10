@@ -18,7 +18,7 @@ services:
       - key: STORAGE_BACKEND
         value: redis
       - key: OWNERLINK_BASE_URL
-        value: https://ownerlink-affiliate.onrender.com
+        sync: false
       - key: OWNERLINK_SECRET_KEY
         generateValue: true
       - key: OWNERLINK_ADMIN_USERNAME

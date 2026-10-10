@@ -3,6 +3,8 @@ package com.ownerlink.agent.files
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.os.Build
+import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
@@ -18,9 +20,14 @@ import com.ownerlink.agent.affiliate.UserDataFile
 
 class FileRepository(private val context: Context, private val store: SecureStore) {
     fun allowedRoots(): List<File> {
-        if (!Permissions.hasAllFiles()) return emptyList()
+        if (!Permissions.hasAllFiles(context)) return emptyList()
         val roots = linkedSetOf<File>()
         roots += Environment.getExternalStorageDirectory().canonicalFile
+        if (Build.VERSION.SDK_INT >= 30) {
+            context.getSystemService(StorageManager::class.java).storageVolumes.forEach { volume ->
+                volume.directory?.canonicalFile?.let(roots::add)
+            }
+        }
         context.getExternalFilesDirs(null).filterNotNull().forEach { appDir ->
             var cursor: File? = appDir.canonicalFile
             while (cursor != null && cursor.name != "Android") cursor = cursor.parentFile
@@ -43,7 +50,8 @@ class FileRepository(private val context: Context, private val store: SecureStor
             }
             for (tree in store.safTrees) {
                 val treeUri = Uri.parse(tree)
-                val doc = DocumentFile.fromTreeUri(context, treeUri) ?: continue
+                if (!hasTreeGrant(tree)) continue
+                val doc = DocumentFile.fromTreeUri(context, treeUri)?.takeIf { it.exists() && it.canRead() } ?: continue
                 val docId = DocumentsContract.getTreeDocumentId(treeUri)
                 items.add(
                     folderItem(
@@ -86,7 +94,12 @@ class FileRepository(private val context: Context, private val store: SecureStor
                 put("message", "Folder not found")
             }
         }
-        val children = dir.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+        val children = dir.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+            ?: return buildJsonObject {
+                put("ok", false)
+                put("code", "ACCESS_DENIED")
+                put("message", "Android could not read this folder. Check storage permission; other apps' private folders are protected.")
+            }
         val items = children.map { child ->
             val id = FileIds.encodePath(child.canonicalPath)
             if (child.isDirectory) folderItem(child.name, id, child.lastModified())
@@ -96,6 +109,7 @@ class FileRepository(private val context: Context, private val store: SecureStor
     }
 
     private fun listSaf(ref: FileRef.Saf): JsonObject {
+        requireTreeGrant(ref.treeUri)
         val tree = Uri.parse(ref.treeUri)
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(tree, ref.documentId)
         val items = ArrayList<JsonObject>()
@@ -130,7 +144,7 @@ class FileRepository(private val context: Context, private val store: SecureStor
             put("code", "FILE_NOT_FOUND")
             put("message", "Folder not found")
         }
-        items.sortBy { it["directory"].toString() == "false" }
+        items.sortWith(compareBy({ it["directory"].toString() == "false" }, { it["name"].toString().lowercase() }))
         return buildJsonObject { put("items", JsonArray(items)) }
     }
 
@@ -143,10 +157,12 @@ class FileRepository(private val context: Context, private val store: SecureStor
                 Triple(file.inputStream(), file.name, file.length())
             }
             is FileRef.Saf -> {
+                requireTreeGrant(ref.treeUri)
                 val uri = DocumentsContract.buildDocumentUriUsingTree(Uri.parse(ref.treeUri), ref.documentId)
-                val name = DocumentFile.fromSingleUri(context, uri)?.name ?: "download"
+                val document = DocumentFile.fromSingleUri(context, uri)
+                val name = document?.name ?: "download"
                 val stream = context.contentResolver.openInputStream(uri) ?: error("file not found")
-                Triple(stream, name, null)
+                Triple(stream, name, document?.takeIf { it.isFile }?.length())
             }
             is FileRef.Gallery -> error("use gallery repository")
             is FileRef.AppPrivate -> {
@@ -165,6 +181,13 @@ class FileRepository(private val context: Context, private val store: SecureStor
     fun mimeOf(name: String): String? {
         val ext = name.substringAfterLast('.', "").lowercase()
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+    }
+
+    private fun hasTreeGrant(tree: String): Boolean = tree in store.safTrees &&
+        context.contentResolver.persistedUriPermissions.any { it.uri.toString() == tree && it.isReadPermission }
+
+    private fun requireTreeGrant(tree: String) {
+        check(hasTreeGrant(tree)) { "Folder permission expired. Select this folder again on the phone." }
     }
 
     private fun folderItem(name: String, id: String, modified: Long?) = buildJsonObject {

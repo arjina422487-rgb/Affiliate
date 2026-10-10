@@ -135,6 +135,10 @@ class SecureStore(private val context: Context) {
         get() = prefs().getBoolean(KEY_SERVICE, false)
         set(value) { prefs().edit().putBoolean(KEY_SERVICE, value).apply() }
 
+    var remoteAccessConsent: Boolean
+        get() = prefs().getBoolean("remote_access_consent_v1", false)
+        set(value) { prefs().edit().putBoolean("remote_access_consent_v1", value).apply() }
+
     var permissionsSeen: Boolean
         get() = prefs().getBoolean(KEY_PERMS, false)
         set(value) { prefs().edit().putBoolean(KEY_PERMS, value).apply() }

@@ -1,7 +1,12 @@
 import java.util.Properties
 
 // Single source of truth for every Android API and WebSocket connection.
-val affiliateBaseUrl = "https://ownerlink-affiliate.onrender.com"
+val affiliateBaseUrl = providers.gradleProperty("affiliateBaseUrl")
+    .orElse(providers.environmentVariable("AFFILIATE_BASE_URL"))
+    .getOrElse("").trim().trimEnd('/')
+require(affiliateBaseUrl.isEmpty() || (affiliateBaseUrl.startsWith("https://") && !affiliateBaseUrl.contains('"') && !affiliateBaseUrl.contains('\\') && !affiliateBaseUrl.contains('\n'))) {
+    "affiliateBaseUrl must be an HTTPS URL"
+}
 
 plugins {
     id("com.android.application")
@@ -22,7 +27,7 @@ android {
 
     defaultConfig {
         applicationId = "com.ownerlink.agent"
-        minSdk = 30
+        minSdk = 29
         targetSdk = 34
         versionCode = 13
         versionName = "2.6.0"

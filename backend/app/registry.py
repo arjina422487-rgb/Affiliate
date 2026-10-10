@@ -33,6 +33,9 @@ class Transfer:
     meta: dict[str, Any] | None = None
     error: CommandError | None = None
     done: bool = False
+    next_sequence: int = 0
+    received_bytes: int = 0
+    closed: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 @dataclass
@@ -68,6 +71,22 @@ class DeviceLink:
 
 
 class Registry:
+    async def _enqueue_transfer(self, transfer: Transfer, item: Any) -> None:
+        if transfer.closed.is_set():
+            return
+        put = asyncio.create_task(transfer.queue.put(item))
+        closed = asyncio.create_task(transfer.closed.wait())
+        try:
+            done, _ = await asyncio.wait({put, closed}, timeout=120, return_when=asyncio.FIRST_COMPLETED)
+            if not done:
+                raise CommandError("TRANSFER_STALLED", "Download consumer stopped reading")
+            if put in done:
+                put.result()
+        finally:
+            put.cancel()
+            closed.cancel()
+            await asyncio.gather(put, closed, return_exceptions=True)
+
     def __init__(self, settings: Settings):
         self.settings = settings
         self.links: dict[str, DeviceLink] = {}
@@ -146,6 +165,8 @@ class Registry:
                 fut.set_exception(error)
         link.pending.clear()
         for transfer in list(link.transfers.values()) + list(link.thumbs.values()):
+            if transfer.done:
+                continue
             transfer.error = error
             try:
                 transfer.queue.put_nowait(error)
@@ -177,7 +198,7 @@ class Registry:
         finally:
             link.pending.pop(request_id, None)
 
-    def handle_text(self, link: DeviceLink, message: dict) -> None:
+    async def handle_text(self, link: DeviceLink, message: dict) -> None:
         link.touch()
         msg_type = message.get("type")
         request_id = message.get("request_id")
@@ -213,10 +234,7 @@ class Registry:
             transfer = link.transfers.get(transfer_id)
             if transfer is not None:
                 transfer.meta = payload
-                try:
-                    transfer.queue.put_nowait({"_meta": payload})
-                except Exception:
-                    pass
+                await self._enqueue_transfer(transfer, {"_meta": payload})
             return
 
         if msg_type == FILE_END:
@@ -224,17 +242,19 @@ class Registry:
             transfer = link.transfers.get(transfer_id)
             if transfer is not None:
                 transfer.done = True
-                try:
-                    transfer.queue.put_nowait(None)
-                except Exception:
-                    pass
+                size = (transfer.meta or {}).get("size")
+                if isinstance(size, int) and transfer.received_bytes != size:
+                    transfer.error = CommandError("INCOMPLETE_FILE", "File transfer ended before the declared size was received")
+                    await self._enqueue_transfer(transfer, transfer.error)
+                else:
+                    await self._enqueue_transfer(transfer, None)
             return
 
         if msg_type == SCREEN_STATUS:
             self._broadcast_screen_json(link.device_id, message)
             return
 
-    def handle_binary(self, link: DeviceLink, data: bytes) -> None:
+    async def handle_binary(self, link: DeviceLink, data: bytes) -> None:
         link.touch()
         try:
             kind, transfer_uuid, seq, flags, payload = parse_frame(data)
@@ -247,27 +267,25 @@ class Registry:
             transfer = link.transfers.get(transfer_id)
             if transfer is None:
                 return
-            try:
-                transfer.queue.put_nowait(payload)
-            except asyncio.QueueFull:
-                # bounded queue: drop is not OK for files; block via task is hard here
-                # put in a fire-and-forget waiter
-                asyncio.create_task(transfer.queue.put(payload))
+            if seq != transfer.next_sequence:
+                transfer.error = CommandError("INVALID_SEQUENCE", "File chunks arrived out of order")
+                await self._enqueue_transfer(transfer, transfer.error)
+                return
+            transfer.next_sequence += 1
+            transfer.received_bytes += len(payload)
+            await self._enqueue_transfer(transfer, payload)
             if flags & FLAG_LAST:
                 transfer.done = True
-                asyncio.create_task(transfer.queue.put(None))
+                await self._enqueue_transfer(transfer, None)
             return
 
         if kind == KIND_THUMB:
             transfer = link.thumbs.get(transfer_id)
             if transfer is None:
                 return
-            try:
-                transfer.queue.put_nowait(payload)
-            except asyncio.QueueFull:
-                asyncio.create_task(transfer.queue.put(payload))
+            await self._enqueue_transfer(transfer, payload)
             if flags & FLAG_LAST:
-                asyncio.create_task(transfer.queue.put(None))
+                await self._enqueue_transfer(transfer, None)
             return
 
         if kind == KIND_SCREEN:
@@ -337,8 +355,9 @@ class Registry:
     def close_transfer(self, device_id: str, transfer_id: str) -> None:
         link = self.links.get(device_id)
         if link is not None:
-            link.transfers.pop(transfer_id, None)
-            link.thumbs.pop(transfer_id, None)
+            transfer = link.transfers.pop(transfer_id, None) or link.thumbs.pop(transfer_id, None)
+            if transfer is not None:
+                transfer.closed.set()
 
     async def open_thumb(self, device_id: str, request_id: str) -> Transfer:
         link = self.links.get(device_id)

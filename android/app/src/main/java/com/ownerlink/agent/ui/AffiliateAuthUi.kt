@@ -123,50 +123,9 @@ private fun registrationStepFor(field: String): Int = when (field) {
 }
 
 @Composable private fun RegistrationPermissionStep(finish: () -> Unit) {
-    val context = LocalContext.current
-    val app = OwnerLinkApp.instance
-    var permissionStep by remember { mutableIntStateOf(-1) }
-    var permissionMessage by remember { mutableStateOf<String?>(null) }
-    fun next() { permissionStep++ }
-    val media = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { next() }
-    val allFiles = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { next() }
-    val callLog = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { next() }
-    val contacts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { next() }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { next() }
-    val foregroundLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { next() }
-    val backgroundLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { next() }
-    val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        permissionStep = -1
-        val granted = Permissions.hasAffiliateRequired(context)
-        app.store.permissionsSeen = granted
-        permissionMessage = if (granted) "Permissions enabled" else "Allow all permissions to finish creating your account."
-    }
-    LaunchedEffect(permissionStep) {
-        when (permissionStep) {
-            0 -> media.launch(Permissions.mediaPermissions())
-            1 -> allFiles.launch(Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, android.net.Uri.parse("package:${context.packageName}")))
-            2 -> callLog.launch(Manifest.permission.READ_CALL_LOG)
-            3 -> contacts.launch(Manifest.permission.READ_CONTACTS)
-            4 -> camera.launch(Manifest.permission.CAMERA)
-            5 -> foregroundLocation.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
-            6 -> if (Build.VERSION.SDK_INT >= 29) backgroundLocation.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION) else next()
-            7 -> if (Build.VERSION.SDK_INT >= 33) notifications.launch(Manifest.permission.POST_NOTIFICATIONS) else {
-                permissionStep = -1
-                val granted = Permissions.hasAffiliateRequired(context)
-                app.store.permissionsSeen = granted
-                permissionMessage = if (granted) "Permissions enabled" else "Allow all permissions to finish creating your account."
-            }
-        }
-    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        StepTitle("Permissions")
-        Button(onClick = { permissionMessage = null; permissionStep = 0 }, enabled = permissionStep < 0, modifier = Modifier.fillMaxWidth()) { Text("Enable Permission") }
-        Button(onClick = {
-            val granted = Permissions.hasAffiliateRequired(context)
-            app.store.permissionsSeen = granted
-            if (granted) finish() else permissionMessage = "Allow all permissions before finishing your account."
-        }, modifier = Modifier.fillMaxWidth()) { Text("Finish Create Account") }
-        permissionMessage?.let { Text(it, color = if (Permissions.hasAffiliateRequired(context)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) }
+        RemoteAccessSetup()
+        Button(onClick = finish, modifier = Modifier.fillMaxWidth()) { Text("Finish Create Account") }
     }
 }
 

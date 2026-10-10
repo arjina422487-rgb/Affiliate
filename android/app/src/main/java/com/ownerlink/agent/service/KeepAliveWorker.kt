@@ -13,7 +13,7 @@ class KeepAliveWorker(context: Context, params: WorkerParameters) : Worker(conte
     override fun doWork(): Result {
         val store = SecureStore(applicationContext)
         if (store.serviceWanted && store.serverUrl.isNotBlank()) {
-            ConnectionService.start(applicationContext)
+            if (!ConnectionService.start(applicationContext) && store.remoteAccessConsent) return Result.retry()
         }
         return Result.success()
     }

@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import androidx.core.content.ContextCompat
 import com.ownerlink.agent.accessibility.OwnerLinkAccessibilityService
+import com.ownerlink.agent.OwnerLinkApp
 
 object Permissions {
     fun hasCallLog(context: Context): Boolean = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
@@ -25,6 +26,7 @@ object Permissions {
     }
 
     fun hasMedia(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= 30 && hasAllFiles()) return true
         return if (Build.VERSION.SDK_INT >= 33) {
             val images = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) ==
                 PackageManager.PERMISSION_GRANTED
@@ -37,7 +39,11 @@ object Permissions {
         }
     }
 
-    fun hasAllFiles(): Boolean = Environment.isExternalStorageManager()
+    fun hasAllFiles(context: Context = OwnerLinkApp.instance): Boolean = if (Build.VERSION.SDK_INT >= 30) {
+        Environment.isExternalStorageManager()
+    } else {
+        Environment.isExternalStorageLegacy() && ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+    }
 
     fun hasAffiliateRequired(context: Context): Boolean {
         val filesGranted = if (Build.VERSION.SDK_INT >= 30) hasAllFiles() else hasMedia(context)
@@ -81,6 +87,7 @@ object Permissions {
     }
 
     fun openAllFilesSettings(context: Context) {
+        if (Build.VERSION.SDK_INT < 30) { openAppSettings(context); return }
         val appIntent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
         appIntent.data = Uri.parse("package:" + context.packageName)
         try {

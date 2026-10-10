@@ -36,7 +36,7 @@ class DeviceSocket(
     private val handler = Handler(Looper.getMainLooper())
     private val stopRequested = AtomicBoolean(false)
     private val lifecycle = SocketLifecycle()
-    private var socket: WebSocket? = null
+    @Volatile private var socket: WebSocket? = null
     private val _state = MutableStateFlow(ConnectionState.Idle)
     val state: StateFlow<ConnectionState> = _state
     private val _message = MutableStateFlow("")
@@ -52,7 +52,25 @@ class DeviceSocket(
     private val client = OkHttpClient.Builder().pingInterval(20, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS).retryOnConnectionFailure(true).build()
     private val commands = CommandHandler(appContext, store, scope,
-        sendJson = { socket?.send(it) }, sendBytes = { socket?.send(ByteString.of(*it)) })
+        sendJson = { check(socket?.send(it) == true) { "Connection closed" } }, sendBytes = { sendFileBytes(it) })
+
+    fun reportServiceFailure(error: Throwable) {
+        disconnect(user = false)
+        _message.value = "Background service could not start (${error.javaClass.simpleName}). Open Remote file access settings and start again."
+        Log.e(TAG, "foreground service failed", error)
+    }
+
+    private fun sendFileBytes(bytes: ByteArray) {
+        val active = socket ?: error("Connection closed")
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(120)
+        // OkHttp closes a WebSocket above 16 MiB. Keep ample room for control messages.
+        while (active.queueSize() > 1024 * 1024) {
+            check(socket === active && !stopRequested.get()) { "Connection closed" }
+            check(System.nanoTime() < deadline) { "Transfer stalled" }
+            Thread.sleep(10)
+        }
+        check(socket === active && active.send(ByteString.of(*bytes))) { "File chunk was not accepted; connection closed" }
+    }
 
     private val heartbeat = object : Runnable {
         override fun run() {
@@ -73,6 +91,7 @@ class DeviceSocket(
 
     /** Idempotent: CONNECTING and CONNECTED states never create/replace a socket. */
     @Synchronized fun connect() {
+        if (!store.remoteAccessConsent || !store.serviceWanted || store.serverUrl.isBlank()) return
         stopRequested.set(false)
         open(lifecycle.connectRequested())
     }
@@ -91,6 +110,7 @@ class DeviceSocket(
 
     /** Called by the foreground-service network monitor. Healthy sockets are untouched. */
     @Synchronized fun retryNow() {
+        if (!store.remoteAccessConsent || !store.serviceWanted || store.serverUrl.isBlank()) return
         if (stopRequested.get()) return
         handler.removeCallbacks(reconnectRunnable)
         open(lifecycle.retryNow())
