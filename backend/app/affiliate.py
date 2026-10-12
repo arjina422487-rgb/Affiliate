@@ -877,6 +877,7 @@ class AffiliateService:
             script = """
 local old=redis.call('GET',KEYS[1]); if old then return redis.call('GET',KEYS[4]..':'..old) end
 local s=cjson.decode(redis.call('GET',KEYS[2])); if s.status=='APPROVED' then return '' end
+if ARGV[3]=='automatic-review' and s.status~='PENDING_REVIEW' then return '' end
 local uraw=redis.call('GET',KEYS[3]); local u=uraw and cjson.decode(uraw) or {balance_milli=0}
 u.balance_milli=(u.balance_milli or 0)+tonumber(ARGV[2]); u.updated_at=ARGV[5]
 s.status='APPROVED'; s.reviewed_by=ARGV[3]; s.review_reason=ARGV[4]; s.updated_at=ARGV[5]

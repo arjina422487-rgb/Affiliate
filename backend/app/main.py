@@ -36,6 +36,7 @@ from .auth import (
     require_csrf,
 )
 from .affiliate import AffiliateError, AffiliateService, coins_to_milli
+from .auto_review import schedule as schedule_auto_review, process_due as process_auto_reviews
 from .affiliate_accounts import AffiliateAccountService
 from .bootstrap import bootstrap_owner, validate_runtime_settings
 from .config import Settings, get_settings
@@ -125,9 +126,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         log.info("Affiliate backend ready storage=%s worker_mode=single", "redis" if settings.uses_redis else "sqlite")
+        async def auto_review_loop():
+            cycle = 0
+            while True:
+                try:
+                    events = await asyncio.to_thread(process_auto_reviews, SessionLocal, cycle % 10 == 0)
+                    for submission, ledger in events:
+                        link = registry.contacts.get(submission["user_id"]) or registry.links.get(submission["device_id"])
+                        if link:
+                            try:
+                                await registry.send_json(link.device_id, P.envelope(P.COIN_CREDITED, link.device_id,
+                                    {"submission": submission, "ledger": ledger}))
+                            except DeviceOffline:
+                                pass
+                except Exception:
+                    log.exception("Automatic review cycle failed; persistent jobs will be retried")
+                cycle += 1
+                await asyncio.sleep(30)
+        review_worker = asyncio.create_task(auto_review_loop()) if settings.uses_redis else None
         try:
             yield
         finally:
+            if review_worker:
+                review_worker.cancel()
+                await asyncio.gather(review_worker, return_exceptions=True)
             log.info("Affiliate backend shutting down active_devices=%d", len(registry.links))
             for link in list(registry.links.values()):
                 try:
@@ -1709,6 +1731,10 @@ async def _handle_device_text(websocket: WebSocket, data: dict, state: dict, Ses
                 str(payload.get("task_id") or ""), str(payload.get("client_submission_id") or ""),
                 account["user_id"], link.device_id, payload.get("fields") or {},
             )
+            try:
+                schedule_auto_review(AffiliateService(db), submission)
+            except Exception:
+                log.exception("Submission saved; automatic review scheduling will be repaired")
             await websocket.send_json(P.envelope(P.TASK_SUBMISSION_ACK, link.device_id, {"submission": submission}, data.get("request_id")))
         except AffiliateError as exc:
             await websocket.send_json(P.envelope(P.ERROR, link.device_id, {"code": exc.code, "message": exc.message}, data.get("request_id")))
