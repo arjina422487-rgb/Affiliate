@@ -18,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Stars
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,22 +47,32 @@ internal fun AffiliateAuth(legacyName: String? = null) {
     val busy by app.affiliateAccount.busy.collectAsState()
     val message by app.affiliateAccount.message.collectAsState()
     var page by remember { mutableStateOf(if (legacyName != null) AuthPage.Register else AuthPage.Welcome) }
-    Surface(Modifier.fillMaxSize()) {
+    GlassBackdrop { AdaptivePane {
         AnimatedContent(page, label = "auth-page") { destination -> when (destination) {
             AuthPage.Welcome -> WelcomePage { page = it }
             AuthPage.Login -> LoginPage(busy, message, { app.affiliateAccount.clearMessage(); page = AuthPage.Welcome }) { phone, password -> app.affiliateAccount.login(phone, password) }
             AuthPage.Register -> RegistrationPage(legacyName.orEmpty(), busy, message, app.affiliateAccount::clearMessage, { app.affiliateAccount.clearMessage(); page = AuthPage.Welcome }, app.affiliateAccount::register)
         } }
-    }
+    } }
 }
 
 @Composable private fun WelcomePage(open: (AuthPage) -> Unit) {
-    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.background))).padding(28.dp), verticalArrangement = Arrangement.Center) {
-        Box(Modifier.size(68.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(22.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Person, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(36.dp)) }
-        Spacer(Modifier.height(28.dp)); Text("Welcome to Affiliate", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-        Text("Build your profile, complete trusted tasks, and track every coin securely.", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(38.dp)); Button(onClick = { open(AuthPage.Register) }, Modifier.fillMaxWidth().height(54.dp)) { Text("Create Account") }
-        Spacer(Modifier.height(12.dp)); OutlinedButton(onClick = { open(AuthPage.Login) }, Modifier.fillMaxWidth().height(54.dp)) { Text("Login") }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(24.dp), verticalArrangement = Arrangement.Center) {
+        Box(Modifier.size(84.dp).glassPanel(28), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Stars, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(42.dp)) }
+        Spacer(Modifier.height(28.dp))
+        Text("AFFILIATE", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(12.dp))
+        Text("A little progress.\nA new possibility.", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+        Text("Discover tasks, follow your activity and keep your rewards in one place.", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(28.dp))
+        Row(Modifier.fillMaxWidth().glassPanel(24).padding(18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            listOf("Discover" to "Tasks", "Track" to "Activity", "Collect" to "Rewards").forEach { (title, subtitle) ->
+                Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.labelLarge); Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
+        Spacer(Modifier.height(28.dp)); Button(onClick = { open(AuthPage.Register) }, Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(18.dp)) { Text("Get started") }
+        Spacer(Modifier.height(12.dp)); OutlinedButton(onClick = { open(AuthPage.Login) }, Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(18.dp)) { Text("I already have an account") }
     }
 }
 
@@ -70,7 +82,7 @@ internal fun AffiliateAuth(legacyName: String? = null) {
         OutlinedTextField(phone, { phone = it.take(20) }, Modifier.fillMaxWidth(), label = { Text("Phone Number") }, singleLine = true)
         OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { TextButton(onClick = { show = !show }) { Text(if (show) "Hide" else "Show") } })
         message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Button(onClick = { login(phone, password) }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp)) { if (busy) CircularProgressIndicator(Modifier.size(22.dp)) else Text("Login") }
+        Button(onClick = { login(phone, password) }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { if (busy) CircularProgressIndicator(Modifier.size(22.dp)) else Text("Login") }
     }
 }
 
@@ -130,8 +142,8 @@ private fun registrationStepFor(field: String): Int = when (field) {
 }
 
 @Composable private fun AuthShell(title: String, subtitle: String, back: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TextButton(onClick = back) { Text("← Back") }; Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold); Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant); Card(shape = RoundedCornerShape(28.dp)) { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        TextButton(onClick = back) { Text("← Back") }; Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold); Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant); Box(Modifier.fillMaxWidth().glassPanel()) { Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content) }
     }
 }
 @Composable private fun Field(value: String, update: (String) -> Unit, label: String, minLines: Int = 1) = OutlinedTextField(value, update, Modifier.fillMaxWidth(), label = { Text(label) }, minLines = minLines)

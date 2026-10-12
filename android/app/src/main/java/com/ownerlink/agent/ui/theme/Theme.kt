@@ -32,19 +32,19 @@ object PrivatChatTokens {
 }
 
 private val LightScheme = lightColorScheme(
-    primary = Color(0xFF315EEB), onPrimary = Color.White,
-    primaryContainer = Color(0xFFDDE4FF), onPrimaryContainer = Color(0xFF10236D),
-    secondary = Color(0xFF53618A), background = Color(0xFFF9FAFE), surface = Color(0xFFF9FAFE),
-    surfaceVariant = Color(0xFFE8EAF2), onSurface = Color(0xFF191B22),
-    onSurfaceVariant = Color(0xFF454650), outline = Color(0xFF767781), error = Color(0xFFBA1A1A),
+    primary = Color(0xFF5355DE), onPrimary = Color.White,
+    primaryContainer = Color(0xFFE5E4FF), onPrimaryContainer = Color(0xFF252466),
+    tertiary = Color(0xFF008A91), secondary = Color(0xFF536677), background = Color(0xFFF4F6FC), surface = Color(0xFFF4F6FC),
+    surfaceVariant = Color(0xFFE8ECF6), onSurface = Color(0xFF171D32),
+    onSurfaceVariant = Color(0xFF596078), outline = Color(0xFF767781), error = Color(0xFFBA1A1A),
 )
 
 private val DarkScheme = darkColorScheme(
-    primary = Color(0xFFB8C4FF), onPrimary = Color(0xFF002B9B),
-    primaryContainer = Color(0xFF1745D2), onPrimaryContainer = Color(0xFFDDE4FF),
-    secondary = Color(0xFFBCC6F0), background = Color(0xFF101116), surface = Color(0xFF101116),
-    surfaceVariant = Color(0xFF292A32), onSurface = Color(0xFFE4E2E9),
-    onSurfaceVariant = Color(0xFFC6C5D0), outline = Color(0xFF90909A), error = Color(0xFFFFB4AB),
+    primary = Color(0xFFB5B5FF), onPrimary = Color(0xFF232154),
+    primaryContainer = Color(0xFF32305E), onPrimaryContainer = Color(0xFFE5E4FF),
+    tertiary = Color(0xFF74D9D6), secondary = Color(0xFFAFCCDA), background = Color(0xFF0B1020), surface = Color(0xFF0B1020),
+    surfaceVariant = Color(0xFF20283E), onSurface = Color(0xFFF0F2FF),
+    onSurfaceVariant = Color(0xFFB7BED5), outline = Color(0xFF90909A), error = Color(0xFFFFB4AB),
 )
 
 private val PrivatTypography = Typography(

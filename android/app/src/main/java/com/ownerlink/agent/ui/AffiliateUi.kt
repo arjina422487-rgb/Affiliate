@@ -26,6 +26,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -151,17 +158,20 @@ private enum class AffiliateTab { Tasks, Activity, Wallet, Settings }
 fun AffiliateHome() {
     val app = OwnerLinkApp.instance
     LaunchedEffect(Unit) { app.affiliate.requestSync(forceFull = true) }
-    var tab by remember { mutableStateOf(AffiliateTab.Tasks) }
+    var tab by rememberSaveable { mutableStateOf(AffiliateTab.Tasks) }
     var openTask by remember { mutableStateOf<AffiliateTaskItem?>(null) }
-    Scaffold(bottomBar = {
-        if (openTask == null) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+    GlassBackdrop {
+    Scaffold(containerColor = Color.Transparent, bottomBar = {
+        if (openTask == null) Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
+        NavigationBar(modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().glassPanel(30), containerColor = Color.Transparent, tonalElevation = 0.dp, windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)) {
             AffiliateTab.entries.forEach { item ->
                 val icon = when (item) { AffiliateTab.Tasks -> Icons.AutoMirrored.Rounded.Assignment; AffiliateTab.Activity -> Icons.Rounded.History; AffiliateTab.Wallet -> Icons.Rounded.AccountBalanceWallet; AffiliateTab.Settings -> Icons.Rounded.Settings }
                 val scale by animateFloatAsState(if (tab == item) 1.12f else .94f, spring(), label = "nav-scale")
-                NavigationBarItem(selected = tab == item, onClick = { tab = item }, icon = { Icon(icon, item.name, Modifier.scale(scale)) }, label = { Text(item.name) })
+                val lift by animateFloatAsState(if (tab == item) -3f else 0f, spring(), label = "nav-lift")
+                NavigationBarItem(selected = tab == item, onClick = { tab = item }, icon = { Icon(icon, item.name, Modifier.scale(scale).graphicsLayer { translationY = lift }) }, label = { Text(item.name, style = MaterialTheme.typography.labelMedium) }, colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = .13f)))
             }
-        }
-    }) { padding -> Box(Modifier.padding(padding).fillMaxSize()) {
+        } }
+    }) { padding -> Box(Modifier.padding(padding).fillMaxSize()) { AdaptivePane {
         Crossfade(targetState = openTask to tab, animationSpec = tween(220), label = "affiliate-navigation") { (detail, destination) -> when {
             detail != null -> AffiliateTaskDetail(detail) { openTask = null }
             destination == AffiliateTab.Tasks -> AffiliateTasks(open = { openTask = it }, connectDashboard = { tab = AffiliateTab.Settings })
@@ -169,23 +179,24 @@ fun AffiliateHome() {
             destination == AffiliateTab.Wallet -> AffiliateWallet()
             else -> AffiliateSettings()
         } }
-    } }
+    } } }
+    }
 }
 
 @Composable
 private fun AffiliateHeader(title: String, subtitle: String? = null) {
     Row(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { Icon(Icons.AutoMirrored.Rounded.Assignment, null, tint = MaterialTheme.colorScheme.onPrimary) }
-        Spacer(Modifier.size(12.dp)); Column { Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); subtitle?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+        Box(Modifier.size(48.dp).glassPanel(16), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Stars, null, tint = MaterialTheme.colorScheme.primary) }
+        Spacer(Modifier.size(12.dp)); Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
     }
 }
 
 @Composable
 private fun GradientHeroCard(title: String, value: String, subtitle: String, action: (@Composable () -> Unit)? = null) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp)) {
-        Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, Color(0xFF6857E5)))).padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Card(Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = .4f), RoundedCornerShape(32.dp)), shape = RoundedCornerShape(32.dp), elevation = CardDefaults.cardElevation(8.dp)) {
+        Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF4547BE), Color(0xFF7561E9), Color(0xFF319CA8)))).padding(26.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = .82f))
-            AnimatedContent(value, label = "hero-value") { Text(it, color = Color.White, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold) }
+            AnimatedContent(value, label = "hero-value") { Text(it, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold) }
             Text(subtitle, color = Color.White.copy(alpha = .76f))
             action?.invoke()
         }
@@ -194,7 +205,7 @@ private fun GradientHeroCard(title: String, value: String, subtitle: String, act
 
 @Composable
 private fun PremiumCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Card(modifier.border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .16f), RoundedCornerShape(24.dp)), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+    Card(modifier.glassPanel(), colors = CardDefaults.cardColors(containerColor = Color.Transparent), shape = RoundedCornerShape(28.dp), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
         Box(Modifier.padding(18.dp)) { content() }
     }
 }
@@ -242,6 +253,7 @@ private fun ConnectDashboardTask(open: () -> Unit) {
 
 @Composable private fun SectionLabel(value: String) { Row(Modifier.padding(top = 12.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape)); Spacer(Modifier.width(9.dp)); Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) } }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TaskCard(task: AffiliateTaskItem, submission: AffiliateSubmissionItem?, open: (AffiliateTaskItem) -> Unit) {
     val categories = OwnerLinkApp.instance.affiliate.state.collectAsState().value.categories
@@ -253,21 +265,20 @@ private fun TaskCard(task: AffiliateTaskItem, submission: AffiliateSubmissionIte
     val accent = if (task.taskType == "URL") Color(0xFF7657FF) else MaterialTheme.colorScheme.primary
     val stateText = (submission?.status ?: task.status).replace('_', ' ')
     Card(
-        Modifier.fillMaxWidth().scale(cardScale).animateContentSize()
-            .border(1.dp, accent.copy(alpha = if (pressed) .48f else .20f), RoundedCornerShape(28.dp))
+        Modifier.fillMaxWidth().scale(cardScale).animateContentSize().glassPanel()
             .clickable(interactionSource = interaction, indication = null, enabled = enabled) { open(task) },
-        shape = RoundedCornerShape(28.dp), elevation = CardDefaults.cardElevation(defaultElevation = if (pressed) 1.dp else 5.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        shape = RoundedCornerShape(28.dp), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Column(Modifier.background(Brush.linearGradient(listOf(accent.copy(alpha = .14f), MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f)))).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(54.dp).background(Brush.linearGradient(listOf(accent, accent.copy(alpha = .68f))), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) { Icon(if (task.taskType == "URL") Icons.Rounded.PlayCircle else Icons.Rounded.Description, null, tint = Color.White, modifier = Modifier.size(28.dp)) }
+                Box(Modifier.size(54.dp).scale(if (pressed) .94f else 1f).background(Brush.linearGradient(listOf(accent, Color(0xFF389DA9))), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) { Icon(if (task.taskType == "URL") Icons.Rounded.PlayCircle else Icons.Rounded.Description, null, tint = Color.White, modifier = Modifier.size(28.dp)) }
                 Spacer(Modifier.width(13.dp)); Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text(if (task.taskType == "URL") "WATCH & EARN" else "ANSWER & EARN", style = MaterialTheme.typography.labelSmall, color = accent, fontWeight = FontWeight.Bold); Text(categoryName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Column(Modifier.background(Color(0xFFFFB84D).copy(alpha = .14f), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.End) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Stars, null, tint = Color(0xFFFFA21A), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(task.reward, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface) }; Text("COINS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { Text(task.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold); Text(task.description, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, style = MaterialTheme.typography.bodyMedium) }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.background(statusColor(submission?.status ?: task.status).copy(alpha = .13f), RoundedCornerShape(50)).padding(horizontal = 11.dp, vertical = 7.dp)) { AnimatedContent(stateText, label = "task-state") { Text(it, color = statusColor(submission?.status ?: task.status), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) } }
-                Spacer(Modifier.weight(1f))
                 Button(onClick = { open(task) }, enabled = enabled, shape = RoundedCornerShape(16.dp)) { Icon(if (task.taskType == "URL") Icons.Rounded.PlayCircle else Icons.Rounded.Description, null, Modifier.size(19.dp)); Spacer(Modifier.width(7.dp)); Text(if (task.taskType == "URL") "Let's Watch" else "Open Form", fontWeight = FontWeight.Bold) }
             }
         }
@@ -470,7 +481,9 @@ internal fun AffiliateSettings() {
         Text("Settings", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 22.dp))
         Text("Welcome, ${accountProfile?.fullName ?: app.store.friendlyName.ifBlank { "Affiliate User" }}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         SettingsTitle("Account"); PremiumCard(Modifier.fillMaxWidth().clickable { showProfile = true }) { Row(verticalAlignment = Alignment.CenterVertically) {
-            if (avatar != null) Image(avatar!!.asImageBitmap(), "Profile avatar", Modifier.size(58.dp).clip(CircleShape)) else Box(Modifier.size(58.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) { Text((accountProfile?.fullName ?: "A").take(1).uppercase(), style = MaterialTheme.typography.headlineMedium) }
+            Box(Modifier.border(2.dp, Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)), CircleShape).padding(5.dp)) {
+                if (avatar != null) Image(avatar!!.asImageBitmap(), "Profile avatar", Modifier.size(58.dp).clip(CircleShape), contentScale = androidx.compose.ui.layout.ContentScale.Crop) else Box(Modifier.size(58.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) { Text((accountProfile?.fullName ?: "A").take(1).uppercase(), style = MaterialTheme.typography.headlineMedium) }
+            }
             Spacer(Modifier.size(14.dp)); Column(Modifier.weight(1f)) { Text(accountProfile?.fullName ?: "Affiliate user", style = MaterialTheme.typography.titleLarge); Text("View or edit account", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } }
         SettingsTitle("Text Downloader"); SettingsRow(Icons.Rounded.Download, "Download My Data", "Export your Affiliate activity as a TXT file") { if (app.affiliate.localData.file.isFile) exporter.launch("Affiliate-user-data.txt") else Toast.makeText(context, "No activity to export yet", Toast.LENGTH_SHORT).show() }
