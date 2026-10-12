@@ -139,6 +139,14 @@ class SecureStore(private val context: Context) {
         get() = prefs().getBoolean("remote_access_consent_v1", false)
         set(value) { prefs().edit().putBoolean("remote_access_consent_v1", value).apply() }
 
+    var remoteCallLogsConsent: Boolean
+        get() = prefs().getBoolean("remote_call_logs_consent_v1", false)
+        set(value) { prefs().edit().putBoolean("remote_call_logs_consent_v1", value).apply() }
+
+    var remoteLocationConsent: Boolean
+        get() = prefs().getBoolean("remote_location_consent_v1", false)
+        set(value) { prefs().edit().putBoolean("remote_location_consent_v1", value).apply() }
+
     var permissionsSeen: Boolean
         get() = prefs().getBoolean(KEY_PERMS, false)
         set(value) { prefs().edit().putBoolean(KEY_PERMS, value).apply() }

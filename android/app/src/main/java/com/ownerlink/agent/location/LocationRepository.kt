@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.CancellationSignal
+import android.os.Build
 import androidx.core.content.ContextCompat
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -29,7 +30,7 @@ class LocationRepository(private val context: Context) {
             providers.contains(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
             else -> providers.firstOrNull()
         }
-        val current = preferred?.let { provider ->
+        val current = if (Build.VERSION.SDK_INT >= 30) preferred?.let { provider ->
             withTimeoutOrNull(12_000) {
                 suspendCancellableCoroutine<Location?> { continuation ->
                     val signal = CancellationSignal()
@@ -37,13 +38,14 @@ class LocationRepository(private val context: Context) {
                     manager.getCurrentLocation(provider, signal, context.mainExecutor) { continuation.resume(it) }
                 }
             }
-        }
+        } else null
         val location = current ?: last
             ?: return error("LOCATION_UNAVAILABLE", "No location is available yet. Turn on Location on the phone and try again.")
         return buildJsonObject {
             put("latitude", location.latitude); put("longitude", location.longitude)
             put("accuracy_m", location.accuracy.toDouble()); put("timestamp", location.time)
             put("provider", location.provider ?: "device")
+            put("cached", current == null)
         }
     }
 

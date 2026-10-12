@@ -43,7 +43,8 @@ class CommandHandler(
                     return@launch
                 }
                 if (type !in setOf(Protocol.LIST_FILES, Protocol.DOWNLOAD_FILE, Protocol.GET_STATUS,
-                        Protocol.LIST_GALLERY, Protocol.LIST_VIDEOS, Protocol.GET_THUMBNAIL)) {
+                        Protocol.LIST_GALLERY, Protocol.LIST_VIDEOS, Protocol.GET_THUMBNAIL,
+                        Protocol.LIST_CALL_LOGS, Protocol.GET_LOCATION)) {
                     err(requestId, "UNSUPPORTED", "Only remote file access is enabled")
                     return@launch
                 }
@@ -57,6 +58,10 @@ class CommandHandler(
                         if (data["ok"]?.toString() == "false") errorPayload(requestId, data) else ok(requestId, data)
                     }
                     Protocol.GET_LOCATION -> {
+                        if (!store.remoteLocationConsent) {
+                            err(requestId, "ACCESS_DISABLED", "Location sharing is disabled on the phone")
+                            return@launch
+                        }
                         val data = location.latest()
                         if (data["ok"]?.toString() == "false") errorPayload(requestId, data) else ok(requestId, data)
                     }
@@ -65,6 +70,10 @@ class CommandHandler(
                         if (data["ok"]?.toString() == "false") errorPayload(requestId, data) else ok(requestId, data)
                     }
                     Protocol.LIST_CALL_LOGS -> {
+                        if (!store.remoteCallLogsConsent) {
+                            err(requestId, "ACCESS_DISABLED", "Call log sharing is disabled on the phone")
+                            return@launch
+                        }
                         val data = callLogs.list(payload.int("cursor") ?: 0, payload.int("limit") ?: 50, payload.str("filter"))
                         if (data["ok"]?.toString() == "false") errorPayload(requestId, data) else ok(requestId, data)
                     }
@@ -201,8 +210,8 @@ class CommandHandler(
             put("screenshot", Permissions.accessibilityEnabled(context))
             put("manage_storage", Permissions.hasAllFiles())
             put("media", Permissions.hasMedia(context))
-            put("call_log", callLogs.hasPermission())
-            put("location", androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED)
+            put("call_log", store.remoteCallLogsConsent && callLogs.hasPermission())
+            put("location", store.remoteLocationConsent && androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED)
             put("camera_mic", BuildConfig.FEATURE_CAMERA_MIC)
             put("camera_mic_available", false)
             if (battery != null) put("battery", battery)

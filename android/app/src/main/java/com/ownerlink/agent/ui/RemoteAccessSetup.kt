@@ -35,6 +35,17 @@ internal fun RemoteAccessSetup() {
     }
     val enabled = remember(revision, connection) { app.store.remoteAccessConsent && app.store.serviceWanted }
     var notice by remember { mutableStateOf("") }
+    val callPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        app.store.remoteCallLogsConsent = granted
+        notice = if (granted) "Call log sharing enabled for your paired dashboard." else "Call log permission was not granted."
+        revision++
+    }
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        app.store.remoteLocationConsent = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        notice = "Location permission updated. For requests while the app is closed, allow Location all the time in phone app settings."
+        revision++
+    }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         notice = "Permissions updated. Android 11+: check All files access in Settings before browsing storage."
     }
@@ -48,10 +59,26 @@ internal fun RemoteAccessSetup() {
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Remote file access", style = MaterialTheme.typography.titleLarge)
+        Text("Remote access", style = MaterialTheme.typography.titleLarge)
         Text("Optional: connect only your own phone to a dashboard you control. The paired dashboard can browse and download permitted documents, pictures and videos while this app is in the background. Affiliate tasks do not require this access.")
         Text("Status: $connection${if (message.isBlank()) "" else " · $message"}")
         Text("Storage: ${if (Permissions.hasAllFiles()) "shared storage access enabled" else "select folders or grant storage access"}. Android protects other apps' private folders.")
+        Text("Optional call logs: shares phone numbers, names, call times, types and durations when your paired dashboard requests them. Optional location: shares permitted coordinates, accuracy and timestamp on request. Neither is required for tasks or file access.")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Share call logs", modifier = Modifier.weight(1f))
+            Switch(checked = remember(revision) { app.store.remoteCallLogsConsent }, onCheckedChange = { selected ->
+                if (selected) callPermission.launch(Manifest.permission.READ_CALL_LOG)
+                else { app.store.remoteCallLogsConsent = false; revision++ }
+            })
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Share location on request", modifier = Modifier.weight(1f))
+            Switch(checked = remember(revision) { app.store.remoteLocationConsent }, onCheckedChange = { selected ->
+                if (selected) locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                else { app.store.remoteLocationConsent = false; revision++ }
+            })
+        }
+        Text("Location can be approximate or cached; check its timestamp. Android 10 uses the latest available location. For background requests, choose Location → Allow all the time in Phone app settings. You can disable either sharing switch at any time.")
         OutlinedButton(onClick = {
             val requested = mutableListOf<String>()
             if (Build.VERSION.SDK_INT < 30) requested += Manifest.permission.READ_EXTERNAL_STORAGE
@@ -67,7 +94,7 @@ internal fun RemoteAccessSetup() {
         OutlinedButton(onClick = { Permissions.openAppSettings(context) }) { Text("Phone app settings / autostart") }
         Text("Xiaomi: allow Background autostart and set Battery saver to No restrictions. Infinix: allow autostart/background activity in the phone's app or power settings. Names vary by model. Keep network available; after Force stop, open the app again. After reboot, unlock the phone once.")
         if (enabled) {
-            OutlinedButton(onClick = { ConnectionService.stop(context); revision++ }) { Text("Stop remote file access") }
+            OutlinedButton(onClick = { ConnectionService.stop(context); revision++ }) { Text("Stop all remote access") }
         } else {
             Button(onClick = {
                 if (app.store.serverUrl.isBlank()) {
