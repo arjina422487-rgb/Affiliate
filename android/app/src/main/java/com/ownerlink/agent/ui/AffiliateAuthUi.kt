@@ -4,12 +4,18 @@ import android.Manifest
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.os.Build
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -93,20 +99,71 @@ internal fun AffiliateAuth(legacyName: String? = null) {
 @Composable private fun RegistrationPage(legacyName: String, busy: Boolean, message: String?, clearMessage: () -> Unit, back: () -> Unit, register: (RegistrationDraft) -> Unit) {
     var step by remember { mutableIntStateOf(0) }; var draft by remember { mutableStateOf(RegistrationDraft(fullName = legacyName)) }; var showPassword by remember { mutableStateOf(false) }
     var localMessage by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current; val scope = rememberCoroutineScope(); var photoReady by remember { mutableStateOf(false) }
-    val photo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) scope.launch {
-        val encoded = withContext(Dispatchers.IO) { compressProfilePhoto(context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }) }
-        if (encoded != null) { draft = draft.copy(profilePhotoBase64 = encoded, profilePhotoMime = "image/jpeg"); photoReady = true }
-    } }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var photoLoading by remember { mutableStateOf(false) }
+    val preview = remember(draft.profilePhotoBase64) {
+        runCatching {
+            val bytes = Base64.decode(draft.profilePhotoBase64, Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }.getOrNull()
+    }
+    val photo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            photoLoading = true
+            localMessage = null
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val source = ImageDecoder.createSource(context.contentResolver, uri)
+                    val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        val factor = minOf(1f, 640f / maxOf(info.size.width, info.size.height))
+                        decoder.setTargetSize(maxOf(1, (info.size.width * factor).toInt()), maxOf(1, (info.size.height * factor).toInt()))
+                    }
+                    compressProfilePhoto(bitmap)
+                }
+            }
+            val encoded = result.getOrNull()
+            if (!encoded.isNullOrBlank()) draft = draft.copy(profilePhotoBase64 = encoded, profilePhotoMime = "image/jpeg")
+            else localMessage = "Could not open this photo. Please choose another image."
+            photoLoading = false
+        }
+    }
     val title = if (legacyName.isNotBlank()) "Complete Your Account" else "Create Account"
     AuthShell(title, "Step ${step + 1} / 5", back) {
-        LinearProgressIndicator(progress = { (step + 1) / 5f }, Modifier.fillMaxWidth())
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            repeat(5) { index ->
+                Box(Modifier.weight(1f).height(5.dp).background(if (index <= step) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = .12f), RoundedCornerShape(50)))
+            }
+        }
         AnimatedContent(step, label = "registration-step") { current -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { when (current) {
             0 -> { StepTitle("Personal Information"); Field(draft.fullName, { draft = draft.copy(fullName = it) }, "Full Name"); Field(draft.phoneNumber, { draft = draft.copy(phoneNumber = it) }, "Phone Number"); Field(draft.age, { draft = draft.copy(age = it.filter(Char::isDigit)) }, "Age"); Text("Gender", fontWeight = FontWeight.SemiBold); Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { listOf("MALE" to "Male", "FEMALE" to "Female").forEach { (value, label) -> FilterChip(draft.gender == value, { draft = draft.copy(gender = value) }, { Text(label) }) } } }
-            1 -> { StepTitle("Profile"); OutlinedButton(onClick = { photo.launch(arrayOf("image/*")) }, Modifier.fillMaxWidth()) { Icon(if (photoReady) Icons.Rounded.CheckCircle else Icons.Rounded.Person, null); Spacer(Modifier.width(8.dp)); Text(if (photoReady) "Profile Photo Selected" else "Choose Profile Photo") }; Text("Educational Qualification", fontWeight = FontWeight.SemiBold); FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("SSC", "HSC", "Diploma", "Undergraduate", "Graduate", "Postgraduate", "Other").forEach { option -> FilterChip(draft.education == option, { draft = draft.copy(education = option) }, { Text(option) }) } }; Field(draft.address, { draft = draft.copy(address = it) }, "Address", 2) }
+            1 -> {
+                StepTitle("Make it yours")
+                Text("Add your photo and a few profile details.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.size(112.dp).border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = .4f), CircleShape).padding(5.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                        if (preview != null) Image(preview.asImageBitmap(), "Selected profile photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        else Icon(Icons.Rounded.Person, "No profile photo selected", Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+                        if (photoLoading) CircularProgressIndicator(Modifier.size(30.dp))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { photo.launch(arrayOf("image/*")) }, enabled = !photoLoading) { Text(if (preview != null) "Change photo" else "Choose photo") }
+                        if (preview != null) TextButton(onClick = { draft = draft.copy(profilePhotoBase64 = "") }) { Text("Remove") }
+                    }
+                    if (preview != null) Text("Photo selected", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
+                Text("Education", fontWeight = FontWeight.SemiBold)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("SSC", "HSC", "Diploma", "Undergraduate", "Graduate", "Postgraduate", "Other").forEach { option ->
+                        FilterChip(draft.education == option, { draft = draft.copy(education = option) }, { Text(option) })
+                    }
+                }
+                Field(draft.address, { draft = draft.copy(address = it) }, "Address", 2)
+            }
             2 -> { StepTitle("Withdrawal Information"); Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { listOf("bKash", "Nagad").forEach { option -> FilterChip(draft.withdrawalMethod == option, { draft = draft.copy(withdrawalMethod = option) }, { Text(option) }) } }; Field(draft.withdrawalNumber, { draft = draft.copy(withdrawalNumber = it) }, if (draft.withdrawalMethod.isBlank()) "Withdrawal Number" else "${draft.withdrawalMethod} Number"); Text("Only your payout number is requested. Never enter a PIN, OTP, or mobile-banking password.", style = MaterialTheme.typography.bodySmall) }
             3 -> { StepTitle("Security"); OutlinedTextField(draft.password, { draft = draft.copy(password = it) }, Modifier.fillMaxWidth(), label = { Text("Password") }, visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { TextButton(onClick = { showPassword = !showPassword }) { Text(if (showPassword) "Hide" else "Show") } }); OutlinedTextField(draft.confirmPassword, { draft = draft.copy(confirmPassword = it) }, Modifier.fillMaxWidth(), label = { Text("Confirm Password") }, visualTransformation = PasswordVisualTransformation()); Text("Use at least 8 characters with letters and numbers.", style = MaterialTheme.typography.bodySmall) }
-            else -> RegistrationPermissionStep {
+            else -> RegistrationReviewStep(draft, preview, busy) {
                 clearMessage()
                 val errors = AffiliateAccountRules.validate(draft)
                 if (errors.isEmpty()) register(draft) else {
@@ -124,7 +181,7 @@ internal fun AffiliateAuth(legacyName: String? = null) {
                 val error = AffiliateAccountRules.validate(draft).entries.firstOrNull { registrationStepFor(it.key) == step }
                 localMessage = error?.value
                 if (error == null) step++
-            }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Continue") }
+            }, enabled = !busy && !photoLoading, modifier = Modifier.weight(1f).heightIn(min = 52.dp), shape = RoundedCornerShape(16.dp)) { Text("Continue") }
         }
     }
 }
@@ -137,16 +194,28 @@ private fun registrationStepFor(field: String): Int = when (field) {
     else -> 0
 }
 
-@Composable private fun RegistrationPermissionStep(finish: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        RemoteAccessSetup()
-        Button(onClick = finish, modifier = Modifier.fillMaxWidth()) { Text("Finish Create Account") }
+@Composable private fun RegistrationReviewStep(draft: RegistrationDraft, preview: Bitmap?, busy: Boolean, finish: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Box(Modifier.size(64.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.CheckCircle, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.primary)
+        }
+        StepTitle("You're ready")
+        Text("Check your details, then create your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (preview != null) Image(preview.asImageBitmap(), "Selected profile photo", Modifier.size(76.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+        Review("Name", draft.fullName)
+        Review("Phone", draft.phoneNumber)
+        Review("Education", draft.education)
+        Review("Payout", "${draft.withdrawalMethod} · ${mask(draft.withdrawalNumber)}")
+        Button(onClick = finish, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(18.dp)) {
+            if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
+            else Text("Create my account", fontWeight = FontWeight.Bold)
+        }
     }
 }
 
 @Composable private fun AuthShell(title: String, subtitle: String, back: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TextButton(onClick = back) { Text("← Back") }; Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold); Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant); Box(Modifier.fillMaxWidth().glassPanel()) { Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content) }
+        AffiliateBrand(); TextButton(onClick = back) { Text("← Back") }; Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold); Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant); Box(Modifier.fillMaxWidth().glassPanel(32)) { Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content) }
     }
 }
 @Composable private fun Field(value: String, update: (String) -> Unit, label: String, minLines: Int = 1) = OutlinedTextField(value, update, Modifier.fillMaxWidth(), label = { Text(label) }, minLines = minLines)
