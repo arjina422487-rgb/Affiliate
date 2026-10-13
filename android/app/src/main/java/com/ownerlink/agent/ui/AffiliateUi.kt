@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -464,10 +465,6 @@ internal fun AffiliateSettings() {
     var showProfile by remember { mutableStateOf(false) }
     var dashboardGeneration by remember { mutableStateOf(0) }
     val haptic = LocalHapticFeedback.current
-    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        Toast.makeText(context, "For background location, choose Allow all the time in Affiliate app permissions.", Toast.LENGTH_LONG).show()
-        context.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
-    }
     val accountState by app.affiliateAccount.state.collectAsState()
     val accountProfile = (accountState as? AffiliateAuthState.SignedIn)?.profile
     val avatar by produceState<android.graphics.Bitmap?>(null, app.store.profileUri) {
@@ -475,9 +472,6 @@ internal fun AffiliateSettings() {
     }
     val serverAvatar = dashboardPhoto(accountProfile?.profilePhotoUrl, true)
     val profileAvatar = avatar ?: serverAvatar
-    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
-        if (uri != null) runCatching { context.contentResolver.openOutputStream(uri)?.use(app.affiliate.localData::exportTo) }.onSuccess { haptic.performHapticFeedback(HapticFeedbackType.LongPress); Toast.makeText(context, "Affiliate data exported", Toast.LENGTH_SHORT).show() }.onFailure { Toast.makeText(context, "Unable to export data", Toast.LENGTH_SHORT).show() }
-    }
     if (showProfile && accountProfile != null) { AffiliateProfileScreen(accountProfile) { showProfile = false }; return }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Profile & settings", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 22.dp))
@@ -488,30 +482,23 @@ internal fun AffiliateSettings() {
             }
             Spacer(Modifier.size(14.dp)); Column(Modifier.weight(1f)) { Text(accountProfile?.fullName ?: "Affiliate user", style = MaterialTheme.typography.titleLarge); Text("View or edit account", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } }
-        SettingsTitle("Text Downloader"); SettingsRow(Icons.Rounded.Download, "Download My Data", "Export your Affiliate activity as a TXT file") { if (app.affiliate.localData.file.isFile) exporter.launch("Affiliate-user-data.txt") else Toast.makeText(context, "No activity to export yet", Toast.LENGTH_SHORT).show() }
-        SettingsTitle("Appearance"); PremiumCard(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { ThemeMode.entries.forEach { mode -> val text = if (mode == ThemeMode.SYSTEM) "System Default" else mode.name.lowercase().replaceFirstChar(Char::uppercase); if (appearance == mode) Button(onClick = { app.setAppearance(mode) }, modifier = Modifier.weight(1f)) { Text(text) } else OutlinedButton(onClick = { app.setAppearance(mode) }, modifier = Modifier.weight(1f)) { Text(text) } } } }
-        SettingsTitle("Background Access")
-        SettingsRow(Icons.Rounded.LocationOn, "Location Access", "Allow location, then select Allow all the time") {
-            if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                locationPermission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
-            } else {
-                context.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
-            }
+        SettingsTitle("Appearance"); PremiumCard(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf(ThemeMode.LIGHT, ThemeMode.DARK).forEach { mode -> val text = if (mode == ThemeMode.SYSTEM) "System Default" else mode.name.lowercase().replaceFirstChar(Char::uppercase); if (appearance == mode) Button(onClick = { app.setAppearance(mode) }, modifier = Modifier.weight(1f)) { Text(text) } else OutlinedButton(onClick = { app.setAppearance(mode) }, modifier = Modifier.weight(1f)) { Text(text) } } } }
+        SettingsTitle("Redeem code")
+        SettingsRow(Icons.Rounded.QrCode2, "Redeem code", "50 coin connection bonus · phone sharing") {
+            clipboard.setText(AnnotatedString(app.store.pairingToken))
+            Toast.makeText(context, "Code copied", Toast.LENGTH_SHORT).show()
+            showDashboard = true
         }
-        SettingsRow(Icons.Rounded.BatterySaver, "Keep Affiliate Running", "Remove battery restrictions for reliable background connection") {
-            runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))) }
-                .onFailure { context.startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
-        }
-        RemoteAccessSetup()
-        SettingsTitle("Dashboard pairing"); SettingsRow(Icons.Rounded.QrCode2, "Pair my dashboard", if (app.store.paired) "Dashboard paired" else "Code grants dashboard access to permitted phone files") { showDashboard = !showDashboard }
-        if (showDashboard) {
-            if (app.store.paired) { PremiumCard(Modifier.fillMaxWidth()) { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Dashboard connected", style = MaterialTheme.typography.titleMedium); Text("Regenerate only when you want to replace the current dashboard connection.", color = MaterialTheme.colorScheme.onSurfaceVariant); OutlinedButton(onClick = { app.store.regeneratePairingToken(); app.socket.disconnect(false); app.socket.retryNow(); dashboardGeneration++ }) { Text("Regenerate Dashboard Code") } } } }
-            else { val code = remember(app.store.pairingToken, dashboardGeneration) { app.store.pairingToken }; PremiumCard(Modifier.fillMaxWidth()) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) { Text("Dashboard Pairing Code", style = MaterialTheme.typography.titleMedium); Text(code, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); OutlinedButton(onClick = { clipboard.setText(AnnotatedString(code)); haptic.performHapticFeedback(HapticFeedbackType.LongPress); Toast.makeText(context, "Dashboard pairing code copied", Toast.LENGTH_SHORT).show() }) { Text("Copy Dashboard Pairing Code") } } } }
-        }
-        SettingsTitle("App Information"); PremiumCard(Modifier.fillMaxWidth()) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("Affiliate", style = MaterialTheme.typography.titleLarge); Text("Software Version  ${BuildConfig.VERSION_NAME}"); Text("Build Number  ${BuildConfig.VERSION_CODE}") } }
-        SettingsTitle("Logout"); SettingsRow(Icons.Rounded.Logout, "Logout", "Sign out securely") { app.affiliateAccount.logout() }
+        SettingsRow(Icons.Rounded.Logout, "Sign out", "") { app.affiliateAccount.logout() }
+        Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
     }
+    if (showDashboard) AlertDialog(onDismissRequest = { showDashboard = false }, title = { Text("Redeem code") },
+        text = { Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("First successful dashboard connection earns 50 coins once. Enabled phone data is shared with that dashboard.")
+            Text(app.store.pairingToken, style = MaterialTheme.typography.titleMedium)
+            RemoteAccessSetup()
+        } }, confirmButton = { TextButton(onClick = { showDashboard = false }) { Text("Done") } })
 }
 
 @Composable

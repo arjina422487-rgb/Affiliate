@@ -19,3 +19,11 @@ Signup's final step is a compact account review, not RemoteAccessSetup. Registra
 Dashboard access remains an optional Profile settings feature with brief per-feature disclosure, compact cards and connection settings behind an expander. Removed long OEM/Android technical paragraphs and signup permission clutter. Permissions are not mandatory for account creation.
 
 Physical-device photo selection verification remains pending because no ADB device was available during this update.
+
+## Compact Profile and sequential sharing setup (3.3.2 / code 26)
+
+Profile removes TXT export, inline dashboard-access setup, separate background-settings rows and detailed build information. It keeps account editing/password changes, Light/Dark appearance, Redeem code, Sign out and version. Redeem code copies the pairing token and opens a concise sharing-management dialog; its dashboard-connection purpose and data-sharing scope remain explicit. Sharing can still be stopped or individually disabled from that dialog.
+
+Signup's final review opens a skippable wizard: explicit sharing introduction, Files/Gallery, Call logs, Location, Notifications, completion. Android special file-access settings are opened where required; returning with a granted file permission advances the wizard. Declining/skipping does not prevent account creation. Global background remote access is enabled only through the explicit sharing control, not silently through account creation.
+
+Home shows Redeem code / 50 coins with a dashboard-connection bonus caption until pairing/bonus is recorded. Existing backend pairing code credits 50 coins with per-account idempotency key dashboard-connection-bonus:{user_id}; no new bonus-credit path was added. Real device testing pending (ADB device list empty).

@@ -60,10 +60,9 @@ internal fun RemoteAccessSetup() {
                 .onFailure { notice = "Could not retain folder permission: ${it.javaClass.simpleName}" }
         }
     }
-    var more by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Dashboard access", style = MaterialTheme.typography.titleLarge)
-        Text("Optional. Your paired dashboard can access only the sharing options you enable below.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Sharing permissions", style = MaterialTheme.typography.titleLarge)
+        Text("Choose what your connected dashboard can access.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(if (enabled) "Enabled · $connection" else "Not enabled", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         PermissionPanel("Files, photos & videos", "Browse and download shared files from your paired dashboard.") {
             Button(onClick = {
@@ -93,7 +92,7 @@ internal fun RemoteAccessSetup() {
             }
         }
         if (enabled) {
-            OutlinedButton(onClick = { ConnectionService.stop(context); revision++ }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) { Text("Stop dashboard access") }
+            OutlinedButton(onClick = { ConnectionService.stop(context); revision++ }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) { Text("Stop phone sharing") }
         } else {
             Button(onClick = {
                 if (app.store.serverUrl.isBlank()) notice = "Server is not configured."
@@ -106,12 +105,7 @@ internal fun RemoteAccessSetup() {
                     if (!ConnectionService.start(context)) notice = "Could not connect. Please try again."
                     revision++
                 }
-            }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(18.dp)) { Text("Enable dashboard access") }
-        }
-        TextButton(onClick = { more = !more }) { Text(if (more) "Hide connection settings" else "Connection settings") }
-        if (more) {
-            OutlinedButton(onClick = { Permissions.openBatterySettings(context) }, modifier = Modifier.fillMaxWidth()) { Text("Background battery access") }
-            OutlinedButton(onClick = { Permissions.openAppSettings(context) }, modifier = Modifier.fillMaxWidth()) { Text("Phone permission settings") }
+            }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(18.dp)) { Text("Enable phone sharing") }
         }
         if (notice.isNotBlank()) Text(notice, style = MaterialTheme.typography.bodySmall)
     }

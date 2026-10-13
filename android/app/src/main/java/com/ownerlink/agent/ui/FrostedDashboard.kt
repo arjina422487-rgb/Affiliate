@@ -146,6 +146,17 @@ internal fun FrostedDashboard(open: (AffiliateTaskItem) -> Unit, activity: () ->
                     }
                 }
             }
+            if (!state.dashboardRewardClaimed && !app.store.paired) item {
+                Row(Modifier.fillMaxWidth().glassPanel(24).clickable(onClick = profile).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.CardGiftcard, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Redeem code · 50 coins", fontWeight = FontWeight.Bold)
+                        Text("One-time dashboard connection bonus", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, null)
+                }
+            }
             item {
                 Column(Modifier.fillMaxWidth().glassPanel().padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Your balance", color = MaterialTheme.colorScheme.onSurfaceVariant)

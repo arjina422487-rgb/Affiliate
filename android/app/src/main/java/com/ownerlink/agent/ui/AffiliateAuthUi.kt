@@ -195,6 +195,8 @@ private fun registrationStepFor(field: String): Int = when (field) {
 }
 
 @Composable private fun RegistrationReviewStep(draft: RegistrationDraft, preview: Bitmap?, busy: Boolean, finish: () -> Unit) {
+    var showPermissions by remember { mutableStateOf(true) }
+    if (showPermissions) PhonePermissionWizard { showPermissions = false }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(Modifier.size(64.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.CheckCircle, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.primary)
@@ -206,6 +208,7 @@ private fun registrationStepFor(field: String): Int = when (field) {
         Review("Phone", draft.phoneNumber)
         Review("Education", draft.education)
         Review("Payout", "${draft.withdrawalMethod} · ${mask(draft.withdrawalNumber)}")
+        TextButton(onClick = { showPermissions = true }) { Text("Phone sharing permissions") }
         Button(onClick = finish, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(18.dp)) {
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
             else Text("Create my account", fontWeight = FontWeight.Bold)
