@@ -641,6 +641,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         user = affiliate_user(request)
         return {"ok": True, "profile": AffiliateAccountService.public(user)} if user else json_error("Authentication required", "AUTH_REQUIRED", 401)
 
+    @app.get("/api/worker/sync")
+    async def worker_sync(request: Request, device_id: str, cursor: int = 0):
+        user = affiliate_user(request)
+        if not user: return json_error("Please sign in again", "AUTH_REQUIRED", 401)
+        if not is_uuid(device_id): return json_error("Invalid device identity", "INVALID_DEVICE", 400)
+        db = db_session()
+        try:
+            return AffiliateService(db).sync(user["user_id"], device_id, user.get("display_name", "Affiliate user"), max(0, cursor))
+        except AffiliateError as exc: return json_error(exc.message, exc.code, exc.status_code)
+        finally: db.close()
+
+    @app.post("/api/worker/submissions")
+    async def worker_submit(request: Request):
+        user = affiliate_user(request)
+        if not user: return json_error("Please sign in again", "AUTH_REQUIRED", 401)
+        body = await _safe_json(request)
+        if not isinstance(body, dict): return json_error("Expected a JSON object", "BAD_REQUEST", 400)
+        device_id = str(body.get("device_id") or "")
+        if not is_uuid(device_id): return json_error("Invalid device identity", "INVALID_DEVICE", 400)
+        db = db_session()
+        try:
+            submission = AffiliateService(db).submit(str(body.get("task_id") or ""),
+                str(body.get("client_submission_id") or ""), user["user_id"], device_id, body.get("fields") or {})
+            try: schedule_auto_review(AffiliateService(db), submission)
+            except Exception: log.exception("HTTP submission saved; review scheduling will be repaired")
+            return {"ok": True, "submission": submission}
+        except AffiliateError as exc: return json_error(exc.message, exc.code, exc.status_code)
+        finally: db.close()
+
     @app.post("/api/auth/logout")
     async def affiliate_logout(request: Request):
         token = bearer(request)

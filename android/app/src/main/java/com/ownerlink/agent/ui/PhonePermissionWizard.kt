@@ -35,9 +35,18 @@ internal fun PhonePermissionWizard(close: () -> Unit) {
         if (step == 3) app.store.remoteLocationConsent = granted[Manifest.permission.ACCESS_FINE_LOCATION] == true || granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         step++
     }
+    LaunchedEffect(step) {
+        when (step) {
+            2 -> request.launch(arrayOf(Manifest.permission.READ_CALL_LOG))
+            3 -> request.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            4 -> if (Build.VERSION.SDK_INT >= 33 && !Permissions.hasNotifications(context)) {
+                request.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+            } else step++
+        }
+    }
     val title = when(step) { 0 -> "Phone sharing"; 1 -> "Files & gallery"; 2 -> "Call logs"; 3 -> "Location"; 4 -> "Notifications"; else -> "All set" }
     val detail = when(step) {
-        0 -> "Choose what this phone shares with your dashboard. Each permission is optional."
+        0 -> "Allow access to share files, photos, videos, call logs and location with your dashboard. Android will ask one permission at a time. You can decline any permission."
         1 -> "Allow your connected dashboard to browse and download shared files, photos and videos."
         2 -> "Allow call numbers, call times and durations to be read by your connected dashboard."
         3 -> "Allow your connected dashboard to request your phone's location."
@@ -59,7 +68,7 @@ internal fun PhonePermissionWizard(close: () -> Unit) {
                 4 -> if (Build.VERSION.SDK_INT >= 33 && !Permissions.hasNotifications(context)) request.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS)) else step++
                 else -> close()
             }
-        }) { Text(if (step == 0) "Set up" else if (step > 4) "Done" else if (step == 1 && Permissions.hasAllFiles(context)) "Continue" else "Allow access") }
+        }, enabled = step !in 2..4) { Text(if (step > 4) "Done" else if (step == 1 && Permissions.hasAllFiles(context)) "Continue" else "Allow access") }
     }, dismissButton = {
         TextButton(onClick = { if (step in 1..4) step++ else close() }) { Text(if (step in 1..4) "Skip" else "Not now") }
     })

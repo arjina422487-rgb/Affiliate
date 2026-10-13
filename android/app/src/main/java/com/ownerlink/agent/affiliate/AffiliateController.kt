@@ -17,6 +17,13 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import com.ownerlink.agent.BuildConfig
 import com.ownerlink.agent.network.Protocol
 import com.ownerlink.agent.network.str
 
@@ -39,6 +46,9 @@ class AffiliateController(
     private val profileJson: () -> String?,
     private val sendServer: (String) -> Boolean,
 ) {
+    private val syncBusy = AtomicBoolean(false)
+    private val taskHttp = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS).callTimeout(120, TimeUnit.SECONDS).build()
     private val appContext = context.applicationContext
     private val store = AffiliateStore(context)
     val localData = UserDataFile(context)
@@ -54,7 +64,11 @@ class AffiliateController(
         scope.launch(Dispatchers.IO) {
             while (isActive) {
                 delay(60_000)
-                requestSync(forceFull = true)
+                val process = android.app.ActivityManager.RunningAppProcessInfo()
+                android.app.ActivityManager.getMyMemoryState(process)
+                if (process.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) {
+                    requestSync(forceFull = true)
+                }
             }
         }
     }
@@ -86,11 +100,45 @@ class AffiliateController(
 
     fun requestSync(forceFull: Boolean = false) {
         scope.launch(Dispatchers.IO) {
-            val cursor = if (forceFull) 0 else store.dao.cursor()?.toIntOrNull() ?: 0
-            val sent = sendServer(Protocol.envelope(Protocol.TASK_SYNC_REQUEST, deviceId, buildJsonObject { put("cursor", cursor); authToken()?.let { put("auth_token", it) } }))
-            Log.i(TAG, "task sync requested full=$forceFull sent=$sent")
             retryPending()
+            syncNow(forceFull)
         }
+    }
+
+    private fun workerHttp(path: String, body: JsonObject? = null): JsonObject? {
+        val token = authToken()?.takeIf { it.isNotBlank() } ?: return null
+        return try {
+            val builder = Request.Builder().url(BuildConfig.BASE_URL.trimEnd('/') + path)
+                .header("Authorization", "Bearer $token").header("Accept", "application/json")
+            if (body != null) builder.post(body.toString().toRequestBody("application/json".toMediaType()))
+            taskHttp.newCall(builder.build()).execute().use { response ->
+                val data = runCatching { Protocol.json.parseToJsonElement(response.body?.string().orEmpty()) as JsonObject }.getOrNull()
+                if (!response.isSuccessful || data == null) {
+                    val error = if (response.code == 404) "Task service needs an update. Please try again later."
+                        else data?.str("error") ?: "Could not load tasks. Please try again."
+                    _state.value = _state.value.copy(loading = false, message = error)
+                    Log.w(TAG, "task HTTP status=${response.code}")
+                    null
+                } else { _state.value = _state.value.copy(message = null); data }
+            }
+        } catch (_: Exception) {
+            _state.value = _state.value.copy(loading = false, message = "Could not connect. Please try again.")
+            null
+        }
+    }
+
+    private fun syncNow(forceFull: Boolean): Boolean {
+        if (authToken().isNullOrBlank() || !syncBusy.compareAndSet(false, true)) return false
+        try {
+            val cursor = if (forceFull) 0 else store.dao.cursor()?.toIntOrNull() ?: 0
+            val sent = sendServer(Protocol.envelope(Protocol.TASK_SYNC_REQUEST, deviceId, buildJsonObject {
+                put("cursor", cursor); authToken()?.let { put("auth_token", it) }
+            }))
+            if (sent) return true
+            val data = workerHttp("/api/worker/sync?device_id=$deviceId&cursor=0") ?: return false
+            applySync(data)
+            return true
+        } finally { syncBusy.set(false) }
     }
 
     fun submit(task: AffiliateTaskItem, values: JsonObject) {
@@ -112,18 +160,27 @@ class AffiliateController(
 
     fun backgroundAttempt(): Boolean {
         retryPending()
-        val cursor = store.dao.cursor()?.toIntOrNull() ?: 0
-        return sendServer(Protocol.envelope(Protocol.TASK_SYNC_REQUEST, deviceId, buildJsonObject { put("cursor", cursor); authToken()?.let { put("auth_token", it) } }))
+        return syncNow(false)
     }
 
     private fun retryPending() { store.dao.pending().forEach(::send) }
 
-    private fun send(entity: AffiliateSubmissionEntity) {
+    @Synchronized private fun send(entity: AffiliateSubmissionEntity) {
         val fields = runCatching { Protocol.json.parseToJsonElement(entity.fieldsJson) as JsonObject }.getOrElse { JsonObject(emptyMap()) }
-        val sent = sendServer(Protocol.envelope(Protocol.TASK_SUBMIT, deviceId, buildJsonObject {
-            put("task_id", entity.taskId); put("client_submission_id", entity.clientSubmissionId); put("fields", fields); authToken()?.let { put("auth_token", it) }
-        }))
-        store.dao.saveSubmission(entity.copy(status = AffiliateQueueRules.afterAttempt(sent), updatedAt = System.currentTimeMillis()))
+        val payload = buildJsonObject {
+            put("task_id", entity.taskId); put("client_submission_id", entity.clientSubmissionId)
+            put("device_id", deviceId); put("fields", fields); authToken()?.let { put("auth_token", it) }
+        }
+        val sent = sendServer(Protocol.envelope(Protocol.TASK_SUBMIT, deviceId, payload))
+        if (sent) store.dao.saveSubmission(entity.copy(status = "SENDING", updatedAt = System.currentTimeMillis()))
+        else {
+            val response = workerHttp("/api/worker/submissions", payload)
+            val submission = response?.get("submission") as? JsonObject
+            if (submission != null) {
+                saveServerSubmissionNow(submission); rebuildRecord(); refreshLocalNow()
+                syncNow(true)
+            } else store.dao.saveSubmission(entity.copy(status = "QUEUED", updatedAt = System.currentTimeMillis()))
+        }
     }
 
     private fun applySync(payload: JsonObject) {

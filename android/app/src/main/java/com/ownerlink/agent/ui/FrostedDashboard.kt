@@ -190,6 +190,12 @@ internal fun FrostedDashboard(open: (AffiliateTaskItem) -> Unit, activity: () ->
                     items(platforms) { label -> FilterChip(selected == label, { selected = label }, label = { Text(label) }, shape = RoundedCornerShape(50)) }
                 }
             }
+            state.message?.let { message -> item {
+                Column(Modifier.fillMaxWidth().glassPanel(20).padding(16.dp)) {
+                    Text(message, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { app.affiliate.requestSync(forceFull = true) }) { Text("Try again") }
+                }
+            } }
             if (state.loading) item { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
             if (!state.loading && visible.isEmpty()) item {
                 Text("No available tasks here yet. Published tasks appear after sync.", color = MaterialTheme.colorScheme.onSurfaceVariant)

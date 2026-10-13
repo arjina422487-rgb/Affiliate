@@ -17,7 +17,6 @@ import java.util.concurrent.TimeUnit
 
 class AffiliateSyncWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
-        ConnectionService.start(applicationContext)
         val sent = runCatching { OwnerLinkApp.instance.affiliate.backgroundAttempt() }.getOrDefault(false)
         return if (sent) Result.success() else Result.retry()
     }

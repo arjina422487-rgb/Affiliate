@@ -79,7 +79,11 @@ class AffiliateAccountController(
     context: Context, private val store: SecureStore, private val scope: CoroutineScope,
     private val onAuthenticated: () -> Unit,
 ) {
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(120, java.util.concurrent.TimeUnit.SECONDS).build()
     private val _state = MutableStateFlow<AffiliateAuthState>(AffiliateAuthState.Checking)
     val state: StateFlow<AffiliateAuthState> = _state
     private val _busy = MutableStateFlow(false); val busy: StateFlow<Boolean> = _busy
@@ -145,7 +149,10 @@ class AffiliateAccountController(
                 client.newCall(builder.build()).execute().use { response ->
                     val json = runCatching { Protocol.json.parseToJsonElement(response.body?.string().orEmpty()) as JsonObject }.getOrNull()
                     if (!response.isSuccessful || json == null) {
-                        _message.value = json?.get("error")?.jsonPrimitive?.contentOrNull ?: "Unable to connect. Try again."
+                        _message.value = (json?.get("error") as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+                            ?: (json?.get("detail") as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+                            ?: "Server unavailable (${response.code}). Please try again."
+                        android.util.Log.w("AffiliateAccount", "request=$method path=$path status=${response.code}")
                         failure?.invoke(response.code); return@use
                     }
                     if (consumeAuth) json["token"]?.jsonPrimitive?.contentOrNull?.let { store.affiliateAuthToken = it }
