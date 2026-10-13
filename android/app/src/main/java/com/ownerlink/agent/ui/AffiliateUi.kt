@@ -165,16 +165,16 @@ fun AffiliateHome() {
         if (openTask == null) Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
         NavigationBar(modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().glassPanel(30), containerColor = Color.Transparent, tonalElevation = 0.dp, windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)) {
             AffiliateTab.entries.forEach { item ->
-                val icon = when (item) { AffiliateTab.Tasks -> Icons.AutoMirrored.Rounded.Assignment; AffiliateTab.Activity -> Icons.Rounded.History; AffiliateTab.Wallet -> Icons.Rounded.AccountBalanceWallet; AffiliateTab.Settings -> Icons.Rounded.Settings }
+                val icon = when (item) { AffiliateTab.Tasks -> Icons.AutoMirrored.Rounded.Assignment; AffiliateTab.Activity -> Icons.Rounded.History; AffiliateTab.Wallet -> Icons.Rounded.AccountBalanceWallet; AffiliateTab.Settings -> Icons.Rounded.Person }
                 val scale by animateFloatAsState(if (tab == item) 1.12f else .94f, spring(), label = "nav-scale")
                 val lift by animateFloatAsState(if (tab == item) -3f else 0f, spring(), label = "nav-lift")
-                NavigationBarItem(selected = tab == item, onClick = { tab = item }, icon = { Icon(icon, item.name, Modifier.scale(scale).graphicsLayer { translationY = lift }) }, label = { Text(item.name, style = MaterialTheme.typography.labelMedium) }, colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = .13f)))
+                NavigationBarItem(selected = tab == item, onClick = { tab = item }, icon = { Icon(icon, item.name, Modifier.scale(scale).graphicsLayer { translationY = lift }) }, label = { Text(if (item == AffiliateTab.Settings) "Profile" else item.name, style = MaterialTheme.typography.labelMedium) }, colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = .13f)))
             }
         } }
     }) { padding -> Box(Modifier.padding(padding).fillMaxSize()) { AdaptivePane {
         Crossfade(targetState = openTask to tab, animationSpec = tween(220), label = "affiliate-navigation") { (detail, destination) -> when {
             detail != null -> AffiliateTaskDetail(detail) { openTask = null }
-            destination == AffiliateTab.Tasks -> AffiliateTasks(open = { openTask = it }, connectDashboard = { tab = AffiliateTab.Settings })
+            destination == AffiliateTab.Tasks -> FrostedDashboard(open = { openTask = it }, activity = { tab = AffiliateTab.Activity }, profile = { tab = AffiliateTab.Settings })
             destination == AffiliateTab.Activity -> AffiliateActivity()
             destination == AffiliateTab.Wallet -> AffiliateWallet()
             else -> AffiliateSettings()
@@ -194,7 +194,7 @@ private fun AffiliateHeader(title: String, subtitle: String? = null) {
 @Composable
 private fun GradientHeroCard(title: String, value: String, subtitle: String, action: (@Composable () -> Unit)? = null) {
     Card(Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = .4f), RoundedCornerShape(32.dp)), shape = RoundedCornerShape(32.dp), elevation = CardDefaults.cardElevation(8.dp)) {
-        Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF4547BE), Color(0xFF7561E9), Color(0xFF319CA8)))).padding(26.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFFAD304D), Color(0xFFD84961), Color(0xFFEF8C96)))).padding(26.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = .82f))
             AnimatedContent(value, label = "hero-value") { Text(it, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold) }
             Text(subtitle, color = Color.White.copy(alpha = .76f))
@@ -473,16 +473,18 @@ internal fun AffiliateSettings() {
     val avatar by produceState<android.graphics.Bitmap?>(null, app.store.profileUri) {
         value = withContext(Dispatchers.IO) { runCatching { app.store.profileUri?.let { context.contentResolver.openInputStream(Uri.parse(it))?.use(BitmapFactory::decodeStream) } }.getOrNull() }
     }
+    val serverAvatar = dashboardPhoto(accountProfile?.profilePhotoUrl, true)
+    val profileAvatar = avatar ?: serverAvatar
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri != null) runCatching { context.contentResolver.openOutputStream(uri)?.use(app.affiliate.localData::exportTo) }.onSuccess { haptic.performHapticFeedback(HapticFeedbackType.LongPress); Toast.makeText(context, "Affiliate data exported", Toast.LENGTH_SHORT).show() }.onFailure { Toast.makeText(context, "Unable to export data", Toast.LENGTH_SHORT).show() }
     }
     if (showProfile && accountProfile != null) { AffiliateProfileScreen(accountProfile) { showProfile = false }; return }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Settings", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 22.dp))
+        Text("Profile & settings", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 22.dp))
         Text("Welcome, ${accountProfile?.fullName ?: app.store.friendlyName.ifBlank { "Affiliate User" }}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         SettingsTitle("Account"); PremiumCard(Modifier.fillMaxWidth().clickable { showProfile = true }) { Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.border(2.dp, Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)), CircleShape).padding(5.dp)) {
-                if (avatar != null) Image(avatar!!.asImageBitmap(), "Profile avatar", Modifier.size(58.dp).clip(CircleShape), contentScale = androidx.compose.ui.layout.ContentScale.Crop) else Box(Modifier.size(58.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) { Text((accountProfile?.fullName ?: "A").take(1).uppercase(), style = MaterialTheme.typography.headlineMedium) }
+                if (profileAvatar != null) Image(profileAvatar.asImageBitmap(), "Profile avatar", Modifier.size(58.dp).clip(CircleShape), contentScale = androidx.compose.ui.layout.ContentScale.Crop) else Box(Modifier.size(58.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) { Text((accountProfile?.fullName ?: "A").take(1).uppercase(), style = MaterialTheme.typography.headlineMedium) }
             }
             Spacer(Modifier.size(14.dp)); Column(Modifier.weight(1f)) { Text(accountProfile?.fullName ?: "Affiliate user", style = MaterialTheme.typography.titleLarge); Text("View or edit account", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } }

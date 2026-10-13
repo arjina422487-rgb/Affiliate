@@ -32,19 +32,21 @@ object PrivatChatTokens {
 }
 
 private val LightScheme = lightColorScheme(
-    primary = Color(0xFF5355DE), onPrimary = Color.White,
-    primaryContainer = Color(0xFFE5E4FF), onPrimaryContainer = Color(0xFF252466),
-    tertiary = Color(0xFF008A91), secondary = Color(0xFF536677), background = Color(0xFFF4F6FC), surface = Color(0xFFF4F6FC),
-    surfaceVariant = Color(0xFFE8ECF6), onSurface = Color(0xFF171D32),
-    onSurfaceVariant = Color(0xFF596078), outline = Color(0xFF767781), error = Color(0xFFBA1A1A),
+    primary = Color(0xFFCF4058), onPrimary = Color.White,
+    primaryContainer = Color(0xFFFFDFE5), onPrimaryContainer = Color(0xFF6B1830),
+    secondary = Color(0xFF3779B8), secondaryContainer = Color(0xFFE3F0FF),
+    tertiary = Color(0xFFFF8995), background = Color(0xFFF5F8FD), surface = Color(0xFFFEFEFF),
+    surfaceVariant = Color(0xFFEDF2F9), onSurface = Color(0xFF102345),
+    onSurfaceVariant = Color(0xFF536A88), outline = Color(0xFF8796AD), error = Color(0xFFB3261E),
 )
 
 private val DarkScheme = darkColorScheme(
-    primary = Color(0xFFB5B5FF), onPrimary = Color(0xFF232154),
-    primaryContainer = Color(0xFF32305E), onPrimaryContainer = Color(0xFFE5E4FF),
-    tertiary = Color(0xFF74D9D6), secondary = Color(0xFFAFCCDA), background = Color(0xFF0B1020), surface = Color(0xFF0B1020),
-    surfaceVariant = Color(0xFF20283E), onSurface = Color(0xFFF0F2FF),
-    onSurfaceVariant = Color(0xFFB7BED5), outline = Color(0xFF90909A), error = Color(0xFFFFB4AB),
+    primary = Color(0xFFFF9CA9), onPrimary = Color(0xFF581426),
+    primaryContainer = Color(0xFF5C283A), onPrimaryContainer = Color(0xFFFFDDE5),
+    secondary = Color(0xFF9BCAFF), secondaryContainer = Color(0xFF223B59),
+    tertiary = Color(0xFFF2A3AD), background = Color(0xFF101A2C), surface = Color(0xFF1C2940),
+    surfaceVariant = Color(0xFF2B3950), onSurface = Color(0xFFF1F5FF),
+    onSurfaceVariant = Color(0xFFB7C8DF), outline = Color(0xFF8E9CB3), error = Color(0xFFFFB4AB),
 )
 
 private val PrivatTypography = Typography(

@@ -20,6 +20,9 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Stars
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.ownerlink.agent.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -58,7 +61,7 @@ internal fun AffiliateAuth(legacyName: String? = null) {
 
 @Composable private fun WelcomePage(open: (AuthPage) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(24.dp), verticalArrangement = Arrangement.Center) {
-        Box(Modifier.size(84.dp).glassPanel(28), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Stars, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(42.dp)) }
+        Box(Modifier.size(84.dp).glassPanel(28), contentAlignment = Alignment.Center) { Image(painterResource(R.drawable.affiliate_symbol), "Affiliate logo", Modifier.size(70.dp)) }
         Spacer(Modifier.height(28.dp))
         Text("AFFILIATE", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(12.dp))

@@ -160,7 +160,7 @@ class SecureStore(private val context: Context) {
         set(value) { prefs().edit().putString(KEY_PROFILE_URI, value).apply() }
 
     var appearance: String
-        get() = prefs().getString(KEY_APPEARANCE, "SYSTEM") ?: "SYSTEM"
+        get() = prefs().getString(KEY_APPEARANCE, "LIGHT") ?: "LIGHT"
         set(value) { prefs().edit().putString(KEY_APPEARANCE, value).apply() }
 
     var affiliateAuthToken: String?
