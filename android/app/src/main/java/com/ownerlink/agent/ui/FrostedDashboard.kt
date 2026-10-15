@@ -34,6 +34,7 @@ import com.ownerlink.agent.OwnerLinkApp
 import com.ownerlink.agent.R
 import com.ownerlink.agent.affiliate.AffiliateAuthState
 import com.ownerlink.agent.affiliate.AffiliateTaskItem
+import com.ownerlink.agent.affiliate.displayTitle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -242,7 +243,7 @@ private fun FrostedTaskTile(task: AffiliateTaskItem, platform: String, modifier:
             else Icon(if (task.taskType == "URL") Icons.Rounded.PlayCircle else Icons.Rounded.Description, null, Modifier.size(48.dp), tint = accent)
             Text(platform, Modifier.align(Alignment.BottomStart).padding(8.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = .94f), RoundedCornerShape(30.dp)).padding(horizontal = 9.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = accent)
         }
-        Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(task.displayTitle(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(if (task.taskType == "URL") "Video / link task" else "Response task", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("${task.reward} coins", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Button(onClick = { open(task) }, Modifier.fillMaxWidth().heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp), shape = RoundedCornerShape(16.dp)) {

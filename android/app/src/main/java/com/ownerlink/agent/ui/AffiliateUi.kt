@@ -129,6 +129,8 @@ import com.ownerlink.agent.affiliate.AffiliateSubmissionItem
 import com.ownerlink.agent.affiliate.AffiliateAuthState
 import com.ownerlink.agent.affiliate.AffiliateProfile
 import com.ownerlink.agent.affiliate.AffiliateTaskItem
+import com.ownerlink.agent.affiliate.displayTitle
+import com.ownerlink.agent.affiliate.displayTaskTitle
 import com.ownerlink.agent.affiliate.DynamicTaskValidator
 import com.ownerlink.agent.affiliate.AffiliatePresentationRules
 import com.ownerlink.agent.affiliate.ProofValue
@@ -225,7 +227,7 @@ private fun AffiliateTasks(open: (AffiliateTaskItem) -> Unit, connectDashboard: 
     val paired = app.store.paired
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { AffiliateHeader("Welcome back, $userName", if (socket in setOf(ConnectionState.Online, ConnectionState.WaitingForPair)) "Your next opportunity is ready" else "Offline mode · cached tasks available") }
-        item { GradientHeroCard("Your next opportunity", available.firstOrNull()?.title ?: "Stay ready", available.firstOrNull()?.let { "Earn ${it.reward} coin" } ?: "New tasks will appear automatically") }
+        item { GradientHeroCard("Your next opportunity", available.firstOrNull()?.displayTitle() ?: "Stay ready", available.firstOrNull()?.let { "Earn ${it.reward} coin" } ?: "New tasks will appear automatically") }
         if (!paired && !state.dashboardRewardClaimed) item { ConnectDashboardTask(connectDashboard) }
         if (state.categories.isNotEmpty()) item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { item { AssistChip(onClick = { category = null }, label = { Text("All") }, leadingIcon = if (category == null) ({ Icon(Icons.Rounded.CloudDone, null, Modifier.size(16.dp)) }) else null) }; items(state.categories) { item -> AssistChip(onClick = { category = item.categoryId }, label = { Text(item.name) }, leadingIcon = if (category == item.categoryId) ({ Icon(Icons.Rounded.CloudDone, null, Modifier.size(16.dp)) }) else null) } } }
         if (state.loading) item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
@@ -277,7 +279,7 @@ private fun TaskCard(task: AffiliateTaskItem, submission: AffiliateSubmissionIte
                 Spacer(Modifier.width(13.dp)); Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text(if (task.taskType == "URL") "WATCH & EARN" else "ANSWER & EARN", style = MaterialTheme.typography.labelSmall, color = accent, fontWeight = FontWeight.Bold); Text(categoryName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Column(Modifier.background(Color(0xFFFFB84D).copy(alpha = .14f), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.End) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Stars, null, tint = Color(0xFFFFA21A), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(task.reward, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface) }; Text("COINS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { Text(task.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold); Text(task.description, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, style = MaterialTheme.typography.bodyMedium) }
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { Text(task.displayTitle(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold); Text(task.description, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, style = MaterialTheme.typography.bodyMedium) }
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.background(statusColor(submission?.status ?: task.status).copy(alpha = .13f), RoundedCornerShape(50)).padding(horizontal = 11.dp, vertical = 7.dp)) { AnimatedContent(stateText, label = "task-state") { Text(it, color = statusColor(submission?.status ?: task.status), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) } }
                 Button(onClick = { open(task) }, enabled = enabled, shape = RoundedCornerShape(16.dp)) { Icon(if (task.taskType == "URL") Icons.Rounded.PlayCircle else Icons.Rounded.Description, null, Modifier.size(19.dp)); Spacer(Modifier.width(7.dp)); Text(if (task.taskType == "URL") "Let's Watch" else "Open Form", fontWeight = FontWeight.Bold) }
@@ -298,7 +300,7 @@ private fun AffiliateTaskDetail(task: AffiliateTaskItem, back: () -> Unit) {
     var watchedConfirmed by rememberSaveable(task.taskId) { mutableStateOf(false) }
     val actionComplete = task.taskType != "URL" || watchedConfirmed
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }; Column { Text(task.categoryId.replaceFirstChar(Char::uppercase), color = MaterialTheme.colorScheme.primary); Text(task.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) } }
+        Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }; Column { Text(task.categoryId.replaceFirstChar(Char::uppercase), color = MaterialTheme.colorScheme.primary); Text(task.displayTitle(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) } }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) { Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text("Reward"); Text("${task.reward} coin", fontWeight = FontWeight.Bold) } }
         TaskStepCard("1", "Understand the task", task.description, Icons.Rounded.Description)
         TaskStepCard("2", "Follow the instructions", task.instructions, Icons.AutoMirrored.Rounded.Assignment)
@@ -321,7 +323,7 @@ private fun AffiliateTaskDetail(task: AffiliateTaskItem, back: () -> Unit) {
         Button(onClick = { errors.clear(); errors.putAll(DynamicTaskValidator.validate(task.fields, values)); if (errors.isEmpty() && actionComplete) review = true }, enabled = actionComplete, modifier = Modifier.fillMaxWidth().height(54.dp)) { Text(if (task.taskType == "URL" && !actionComplete) "Confirm I Watched first" else "Review and complete") }
         Text("Only the answers and proof files you explicitly choose are submitted. Other phone files are never scanned.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    if (review) AlertDialog(onDismissRequest = { review = false }, title = { Text("Review before submitting") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(task.title, fontWeight = FontWeight.Bold); task.fields.filter { it.type != "note" && values[it.id] != null }.forEach { Text("${it.label}: ${displayValue(values[it.id])}") }; Text("After submission, this task will be Pending Review.") } }, confirmButton = { Button(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); app.affiliate.submit(task, valuesToJson(values)); review = false; back() }) { Text("Submit task") } }, dismissButton = { TextButton(onClick = { review = false }) { Text("Go back") } })
+    if (review) AlertDialog(onDismissRequest = { review = false }, title = { Text("Review before submitting") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(task.displayTitle(), fontWeight = FontWeight.Bold); task.fields.filter { it.type != "note" && values[it.id] != null }.forEach { Text("${it.label}: ${displayValue(values[it.id])}") }; Text("After submission, this task will be Pending Review.") } }, confirmButton = { Button(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); app.affiliate.submit(task, valuesToJson(values)); review = false; back() }) { Text("Submit task") } }, dismissButton = { TextButton(onClick = { review = false }) { Text("Go back") } })
 }
 
 @Composable
@@ -401,7 +403,7 @@ internal fun AffiliateActivity() {
     PremiumCard(Modifier.fillMaxWidth().animateContentSize()) { Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(44.dp).background(statusColor(item.status).copy(alpha = .18f), CircleShape), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.History, null, tint = statusColor(item.status)) }
         Spacer(Modifier.size(12.dp)); Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(taskTitle ?: item.taskId, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(taskTitle?.let(::displayTaskTitle)?.ifBlank { item.taskId } ?: item.taskId, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             StatusChip(item.status)
             item.reviewReason?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             Text(DateFormat.getDateTimeInstance().format(Date(item.updatedAt)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

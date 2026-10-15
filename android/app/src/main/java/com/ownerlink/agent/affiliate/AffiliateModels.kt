@@ -68,6 +68,24 @@ data class AffiliateLedgerItem(
     val createdAt: String,
 )
 
+/** User-facing task labels omit batch numbering while the task ID remains unique. */
+fun displayTaskTitle(title: String): String = title.trim()
+    .replace(Regex("""[\s._#-]+\d+(?:[._-]\d+)*$"""), "")
+    .trim()
+
+fun AffiliateTaskItem.displayTitle(): String {
+    val host = runCatching { URI(actionUrl.orEmpty()).host.orEmpty().lowercase().removePrefix("www.") }.getOrDefault("")
+    val platform = when {
+        host == "youtube.com" || host.endsWith(".youtube.com") || host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com") || host == "youtu.be" -> "YouTube"
+        host == "instagram.com" || host.endsWith(".instagram.com") -> "Instagram"
+        host == "tiktok.com" || host.endsWith(".tiktok.com") -> "TikTok"
+        host == "facebook.com" || host.endsWith(".facebook.com") || host == "fb.watch" || host.endsWith(".fb.watch") -> "Facebook"
+        else -> null
+    }
+    if (taskType == "URL" && platform != null) return "$platform Video"
+    return displayTaskTitle(title).ifBlank { title.trim() }
+}
+
 data class ProofValue(val name: String, val mime: String, val size: Long, val sha256: String, val localUri: String, val fileId: String = "")
 
 object DynamicTaskValidator {
