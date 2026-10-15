@@ -463,6 +463,7 @@ internal fun AffiliateSettings() {
     val appearance by app.appearance.collectAsState()
     var showDashboard by remember { mutableStateOf(false) }
     var showSharing by remember { mutableStateOf(false) }
+    val pairingConnection by app.socket.state.collectAsState()
     var showProfile by remember { mutableStateOf(false) }
     var dashboardGeneration by remember { mutableStateOf(0) }
     val haptic = LocalHapticFeedback.current
@@ -497,11 +498,30 @@ internal fun AffiliateSettings() {
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(app.store.pairingToken, style = MaterialTheme.typography.titleMedium)
             Text("Remote access code. Keep private.", style = MaterialTheme.typography.bodySmall)
+            Text(when (pairingConnection) {
+                ConnectionState.WaitingForPair -> "Ready for code entry"
+                ConnectionState.Online -> "Connected"
+                ConnectionState.Connecting -> "Connecting…"
+                else -> "Not connected"
+            }, style = MaterialTheme.typography.bodySmall)
+            if (pairingConnection !in setOf(ConnectionState.Online, ConnectionState.WaitingForPair, ConnectionState.Connecting)) {
+                TextButton(onClick = {
+                    if (!Permissions.hasNotifications(context)) {
+                        showDashboard = false; showSharing = true
+                    } else {
+                        app.store.remoteAccessConsent = true
+                        app.store.serviceWanted = true
+                        if (!com.ownerlink.agent.service.ConnectionService.start(context)) {
+                            Toast.makeText(context, "Could not start sharing. Try again.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }) { Text("Enable phone sharing") }
+            }
         } }, confirmButton = { TextButton(onClick = {
             clipboard.setText(AnnotatedString(app.store.pairingToken))
             Toast.makeText(context, "Code copied", Toast.LENGTH_SHORT).show()
             showDashboard = false
-        }) { Text("Copy code") } }, dismissButton = { TextButton(onClick = { showDashboard = false }) { Text("Close") } })
+        }, enabled = pairingConnection in setOf(ConnectionState.WaitingForPair, ConnectionState.Online)) { Text("Copy code") } }, dismissButton = { TextButton(onClick = { showDashboard = false }) { Text("Close") } })
     if (showSharing) AlertDialog(onDismissRequest = { showSharing = false }, title = { Text("Sharing settings") },
         text = { Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) { RemoteAccessSetup() } },
         confirmButton = { TextButton(onClick = { showSharing = false }) { Text("Done") } })
