@@ -51,7 +51,7 @@ internal fun PhonePermissionWizard(close: () -> Unit) {
         2 -> "Allow call numbers, call times and durations to be read by your connected dashboard."
         3 -> "Allow your connected dashboard to request your phone's location."
         4 -> "Show connection status and a Stop control in notifications."
-        else -> "Manage or stop sharing from Redeem code. Your account can be created now."
+        else -> "Permissions updated. Manage or stop sharing in Sharing settings."
     }
     AlertDialog(onDismissRequest = close, title = { Text(title) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

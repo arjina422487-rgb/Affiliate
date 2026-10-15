@@ -56,6 +56,10 @@ internal fun AffiliateAuth(legacyName: String? = null) {
     val busy by app.affiliateAccount.busy.collectAsState()
     val message by app.affiliateAccount.message.collectAsState()
     var page by remember { mutableStateOf(if (legacyName != null) AuthPage.Register else AuthPage.Welcome) }
+    if (!message.isNullOrBlank()) AlertDialog(
+        onDismissRequest = app.affiliateAccount::clearMessage,
+        title = { Text("Please check") }, text = { Text(message.orEmpty()) },
+        confirmButton = { TextButton(onClick = app.affiliateAccount::clearMessage) { Text("OK") } })
     GlassBackdrop { AdaptivePane {
         AnimatedContent(page, label = "auth-page") { destination -> when (destination) {
             AuthPage.Welcome -> WelcomePage { page = it }
@@ -195,8 +199,13 @@ private fun registrationStepFor(field: String): Int = when (field) {
 }
 
 @Composable private fun RegistrationReviewStep(draft: RegistrationDraft, preview: Bitmap?, busy: Boolean, finish: () -> Unit) {
-    var showPermissions by remember { mutableStateOf(true) }
-    if (showPermissions) PhonePermissionWizard { showPermissions = false }
+    val context = LocalContext.current
+    val permissionPrefs = remember { context.getSharedPreferences("permission_onboarding", android.content.Context.MODE_PRIVATE) }
+    var showPermissions by remember { mutableStateOf(!permissionPrefs.getBoolean("presented", false)) }
+    if (showPermissions) PhonePermissionWizard {
+        permissionPrefs.edit().putBoolean("presented", true).apply()
+        showPermissions = false
+    }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(Modifier.size(64.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.CheckCircle, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.primary)

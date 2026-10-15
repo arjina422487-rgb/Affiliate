@@ -462,6 +462,7 @@ internal fun AffiliateSettings() {
     val clipboard = LocalClipboardManager.current
     val appearance by app.appearance.collectAsState()
     var showDashboard by remember { mutableStateOf(false) }
+    var showSharing by remember { mutableStateOf(false) }
     var showProfile by remember { mutableStateOf(false) }
     var dashboardGeneration by remember { mutableStateOf(0) }
     val haptic = LocalHapticFeedback.current
@@ -484,21 +485,26 @@ internal fun AffiliateSettings() {
         } }
         SettingsTitle("Appearance"); PremiumCard(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf(ThemeMode.LIGHT, ThemeMode.DARK).forEach { mode -> val text = if (mode == ThemeMode.SYSTEM) "System Default" else mode.name.lowercase().replaceFirstChar(Char::uppercase); if (appearance == mode) Button(onClick = { app.setAppearance(mode) }, modifier = Modifier.weight(1f)) { Text(text) } else OutlinedButton(onClick = { app.setAppearance(mode) }, modifier = Modifier.weight(1f)) { Text(text) } } } }
         SettingsTitle("Redeem code")
-        SettingsRow(Icons.Rounded.QrCode2, "Redeem code", "50 coin connection bonus · phone sharing") {
-            clipboard.setText(AnnotatedString(app.store.pairingToken))
-            Toast.makeText(context, "Code copied", Toast.LENGTH_SHORT).show()
+        SettingsRow(Icons.Rounded.QrCode2, "Redeem code", "Tap to view and copy") {
             showDashboard = true
         }
+        TextButton(onClick = { showSharing = true }) { Text("Sharing settings") }
         SettingsRow(Icons.Rounded.Logout, "Sign out", "") { app.affiliateAccount.logout() }
         Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
     }
     if (showDashboard) AlertDialog(onDismissRequest = { showDashboard = false }, title = { Text("Redeem code") },
-        text = { Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("First successful dashboard connection earns 50 coins once. Enabled phone data is shared with that dashboard.")
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(app.store.pairingToken, style = MaterialTheme.typography.titleMedium)
-            RemoteAccessSetup()
-        } }, confirmButton = { TextButton(onClick = { showDashboard = false }) { Text("Done") } })
+            Text("Connects this phone to your dashboard.", style = MaterialTheme.typography.bodySmall)
+        } }, confirmButton = { TextButton(onClick = {
+            clipboard.setText(AnnotatedString(app.store.pairingToken))
+            Toast.makeText(context, "Code copied", Toast.LENGTH_SHORT).show()
+            showDashboard = false
+        }) { Text("Copy code") } }, dismissButton = { TextButton(onClick = { showDashboard = false }) { Text("Close") } })
+    if (showSharing) AlertDialog(onDismissRequest = { showSharing = false }, title = { Text("Sharing settings") },
+        text = { Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) { RemoteAccessSetup() } },
+        confirmButton = { TextButton(onClick = { showSharing = false }) { Text("Done") } })
 }
 
 @Composable

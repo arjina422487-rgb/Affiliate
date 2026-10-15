@@ -68,7 +68,7 @@ object AffiliateAccountRules {
         if (draft.siteAddress.isNotBlank() && normalizeSiteAddress(draft.siteAddress) == null) errors["siteAddress"] = "Enter a valid site address"
         if (draft.withdrawalMethod !in setOf("bKash", "Nagad")) errors["withdrawalMethod"] = "Choose bKash or Nagad"
         if (normalizePhone(draft.withdrawalNumber) == null) errors["withdrawalNumber"] = "Enter a valid payout number"
-        if (draft.password.length < 8 || draft.password.none(Char::isLetter) || draft.password.none(Char::isDigit)) errors["password"] = "Use 8+ characters with letters and numbers"
+        if (draft.password.length < 8 || !draft.password.contains(Regex("[A-Za-z]")) || !draft.password.contains(Regex("[0-9]"))) errors["password"] = "Use 8+ characters with English letters and numbers"
         if (draft.password != draft.confirmPassword) errors["confirmPassword"] = "Passwords do not match"
         if (draft.profilePhotoBase64.isBlank()) errors["photo"] = "Profile photo is required"
         return errors
@@ -79,6 +79,7 @@ class AffiliateAccountController(
     context: Context, private val store: SecureStore, private val scope: CoroutineScope,
     private val onAuthenticated: () -> Unit,
 ) {
+    private val requestBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
@@ -128,7 +129,7 @@ class AffiliateAccountController(
         val cached = store.affiliateProfileJson?.let(::parseProfile)
         val token = store.affiliateAuthToken
         if (token.isNullOrBlank()) {
-            _state.value = if (store.onboardingComplete || store.friendlyName.isNotBlank()) AffiliateAuthState.CompleteAccount(store.friendlyName) else AffiliateAuthState.SignedOut
+            _state.value = AffiliateAuthState.SignedOut
             return
         }
         if (cached != null) _state.value = AffiliateAuthState.SignedIn(cached)
@@ -139,6 +140,7 @@ class AffiliateAccountController(
 
     private fun request(path: String, method: String, body: JsonObject?, authenticate: Boolean, consumeAuth: Boolean,
                         success: (() -> Unit)? = null, failure: ((Int) -> Unit)? = null) {
+        if (!requestBusy.compareAndSet(false, true)) return
         scope.launch(Dispatchers.IO) {
             _busy.value = true; _message.value = null
             try {
@@ -155,16 +157,26 @@ class AffiliateAccountController(
                         android.util.Log.w("AffiliateAccount", "request=$method path=$path status=${response.code}")
                         failure?.invoke(response.code); return@use
                     }
-                    if (consumeAuth) json["token"]?.jsonPrimitive?.contentOrNull?.let { store.affiliateAuthToken = it }
                     val profileObject = json["profile"] as? JsonObject
+                    if (consumeAuth && (json["token"]?.jsonPrimitive?.contentOrNull.isNullOrBlank() || profileObject == null)) {
+                        _message.value = "The server returned an incomplete sign-in response. Please try again."
+                        android.util.Log.w("AffiliateAccount", "incomplete auth response path=$path")
+                        return@use
+                    }
+                    if (consumeAuth) json["token"]?.jsonPrimitive?.contentOrNull?.let { store.affiliateAuthToken = it }
                     if (profileObject != null) {
                         store.affiliateProfileJson = profileObject.toString(); val profile = parseProfile(profileObject.toString())
                         if (profile != null) { store.friendlyName = profile.fullName; store.onboardingComplete = true; _state.value = AffiliateAuthState.SignedIn(profile); onAuthenticated() }
                     }
                     success?.invoke()
                 }
-            } catch (_: Exception) { _message.value = "Unable to connect. Check your internet and try again." }
-            finally { _busy.value = false }
+            } catch (error: Exception) {
+                android.util.Log.w("AffiliateAccount", "request=$method path=$path failure=${error.javaClass.simpleName}")
+                _message.value = if (path == "/api/auth/register" && error is java.io.IOException)
+                    "The server did not confirm account creation. Try signing in with the same phone number before creating it again."
+                else "Unable to connect. Check your internet and try again."
+            }
+            finally { _busy.value = false; requestBusy.set(false) }
         }
     }
 

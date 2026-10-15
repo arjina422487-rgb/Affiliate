@@ -34,7 +34,6 @@ import com.ownerlink.agent.OwnerLinkApp
 import com.ownerlink.agent.R
 import com.ownerlink.agent.affiliate.AffiliateAuthState
 import com.ownerlink.agent.affiliate.AffiliateTaskItem
-import com.ownerlink.agent.network.ConnectionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -101,7 +100,6 @@ internal fun FrostedDashboard(open: (AffiliateTaskItem) -> Unit, activity: () ->
     val app = OwnerLinkApp.instance
     val state by app.affiliate.state.collectAsState()
     val account by app.affiliateAccount.state.collectAsState()
-    val socket by app.socket.state.collectAsState()
     val user = (account as? AffiliateAuthState.SignedIn)?.profile
     val name = user?.fullName ?: app.store.friendlyName.ifBlank { "Affiliate user" }
     val photo = dashboardPhoto(user?.profilePhotoUrl, true)
@@ -182,7 +180,7 @@ internal fun FrostedDashboard(open: (AffiliateTaskItem) -> Unit, activity: () ->
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Today's opportunities", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    TextButton(onClick = { selected = "All" }) { Text("See all") }
+                    TextButton(onClick = { selected = "All"; app.affiliate.requestSync(forceFull = true) }) { Text("Refresh") }
                 }
             }
             item {
@@ -216,9 +214,6 @@ internal fun FrostedDashboard(open: (AffiliateTaskItem) -> Unit, activity: () ->
                     }
                     Icon(Icons.AutoMirrored.Rounded.ArrowForward, null)
                 }
-            }
-            if (socket !in setOf(ConnectionState.Online, ConnectionState.WaitingForPair)) item {
-                Text("Offline · showing saved tasks", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
