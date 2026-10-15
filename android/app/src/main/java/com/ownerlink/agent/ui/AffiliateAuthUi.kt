@@ -207,7 +207,7 @@ private fun registrationStepFor(field: String): Int = when (field) {
 @Composable private fun RegistrationReviewStep(draft: RegistrationDraft, preview: Bitmap?, busy: Boolean, finish: () -> Unit) {
     val context = LocalContext.current
     val permissionPrefs = remember { context.getSharedPreferences("permission_onboarding", android.content.Context.MODE_PRIVATE) }
-    var showPermissions by remember { mutableStateOf(!permissionPrefs.getBoolean("presented", false)) }
+    var showPermissions by remember { mutableStateOf(!permissionPrefs.getBoolean("presented", false) || !sharingPermissionsGranted(context)) }
     if (showPermissions) PhonePermissionWizard {
         permissionPrefs.edit().putBoolean("presented", true).apply()
         showPermissions = false
@@ -216,14 +216,17 @@ private fun registrationStepFor(field: String): Int = when (field) {
         Box(Modifier.size(64.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.CheckCircle, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.primary)
         }
-        StepTitle("You're ready")
+        StepTitle("Overview")
         Text("Check your details, then create your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (preview != null) Image(preview.asImageBitmap(), "Selected profile photo", Modifier.size(76.dp).clip(CircleShape), contentScale = ContentScale.Crop)
         Review("Name", draft.fullName)
         Review("Phone", draft.phoneNumber)
+        Review("Age", draft.age)
+        Review("Gender", draft.gender.lowercase().replaceFirstChar(Char::uppercase))
         Review("Education", draft.education)
+        Review("Address", draft.address)
         Review("Payout", "${draft.withdrawalMethod} · ${mask(draft.withdrawalNumber)}")
-        TextButton(onClick = { showPermissions = true }) { Text("Phone sharing permissions") }
+        TextButton(onClick = { showPermissions = true }) { Text("Permissions") }
         Button(onClick = finish, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(18.dp)) {
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
             else Text("Create my account", fontWeight = FontWeight.Bold)
@@ -238,6 +241,11 @@ private fun registrationStepFor(field: String): Int = when (field) {
 }
 @Composable private fun Field(value: String, update: (String) -> Unit, label: String, minLines: Int = 1) = OutlinedTextField(value, update, Modifier.fillMaxWidth(), label = { Text(label) }, minLines = minLines)
 @Composable private fun StepTitle(value: String) = Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-@Composable private fun Review(label: String, value: String) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(value.take(36), fontWeight = FontWeight.SemiBold) } }
+@Composable private fun Review(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(label, Modifier.weight(0.38f), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, Modifier.weight(0.62f), fontWeight = FontWeight.SemiBold)
+    }
+}
 private fun mask(value: String): String { val d = value.filter(Char::isDigit); return if (d.length >= 5) d.take(2) + "******" + d.takeLast(3) else "••••••" }
 internal fun compressProfilePhoto(bitmap: Bitmap?): String? { bitmap ?: return null; val ratio = minOf(1f, 640f / maxOf(bitmap.width, bitmap.height)); val scaled = if (ratio < 1f) Bitmap.createScaledBitmap(bitmap, (bitmap.width * ratio).toInt(), (bitmap.height * ratio).toInt(), true) else bitmap; val output = ByteArrayOutputStream(); scaled.compress(Bitmap.CompressFormat.JPEG, 78, output); return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP) }
