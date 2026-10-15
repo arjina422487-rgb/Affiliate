@@ -67,7 +67,7 @@ internal fun PhonePermissionWizard(close: () -> Unit) {
     }
     val title = when(step) { 0 -> "Permissions"; 1 -> "Files & gallery"; 2 -> "Call logs"; 3 -> "Location"; 4 -> "Notifications"; else -> "Permissions reviewed" }
     val detail = when(step) {
-        0 -> "Allow remote access to files, photos, videos, call logs and location. Each permission is optional."
+        0 -> "Allow the server to access your files, call logs and location."
         1 -> "Allow remote browsing and downloading of shared files."
         2 -> "Allow remote access to call numbers, times and durations."
         3 -> "Allow remote requests for this phone's location."
