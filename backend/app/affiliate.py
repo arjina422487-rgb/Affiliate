@@ -272,7 +272,13 @@ def eligible(task: dict[str, Any], user_id: str, device_id: str, quality_score: 
 
 
 def _sequence_platform(task: dict[str, Any]) -> str:
-    """Keep mixed-platform imports moving independently within each sequence."""
+    """Return a stable platform key for independent task-feed queues.
+
+    Prefer the destination host, but imports can use shortened or otherwise
+    opaque URLs. In that case use the task's labels and copy before falling
+    back to its category, so unrelated video platforms do not collapse into a
+    single queue just because they share a category.
+    """
     host = (urlparse(str(task.get("action_url") or "")).hostname or "").lower().removeprefix("www.").removeprefix("m.")
     if host == "youtu.be" or host == "youtube.com" or host.endswith(".youtube.com") or host == "youtube-nocookie.com":
         return "youtube"
@@ -282,6 +288,15 @@ def _sequence_platform(task: dict[str, Any]) -> str:
         return "instagram"
     if host == "tiktok.com" or host.endswith(".tiktok.com"):
         return "tiktok"
+    text = " ".join(str(task.get(key) or "") for key in ("title", "category_id", "description", "instructions")).casefold()
+    for platform, aliases in (
+        ("youtube", ("youtube", "youtu.be")),
+        ("facebook", ("facebook", "fb.watch", "fb.me")),
+        ("instagram", ("instagram", "ig.me")),
+        ("tiktok", ("tiktok",)),
+    ):
+        if any(alias in text for alias in aliases):
+            return platform
     return f"category:{task.get('category_id', '')}"
 
 
@@ -792,8 +807,12 @@ class AffiliateService:
         sequence_id = task.get("sequence_id")
         if sequence_id:
             submitted_ids = {row["task_id"] for row in self.submissions(user_id=user_id, device_id=device_id)}
+            platform = _sequence_platform(task)
             remaining = sorted(
-                (row for row in self.tasks(status="PUBLISHED") if row.get("sequence_id") == sequence_id and row["task_id"] not in submitted_ids),
+                (row for row in self.tasks(status="PUBLISHED")
+                 if row.get("sequence_id") == sequence_id
+                 and _sequence_platform(row) == platform
+                 and row["task_id"] not in submitted_ids),
                 key=lambda row: int(row.get("sequence_order", 0)),
             )
             if not remaining or remaining[0]["task_id"] != task_id:
