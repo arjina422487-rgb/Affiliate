@@ -44,12 +44,12 @@ internal fun PhonePermissionWizard(close: () -> Unit) {
             } else step++
         }
     }
-    val title = when(step) { 0 -> "Phone sharing"; 1 -> "Files & gallery"; 2 -> "Call logs"; 3 -> "Location"; 4 -> "Notifications"; else -> "All set" }
+    val title = when(step) { 0 -> "Permissions"; 1 -> "Files & gallery"; 2 -> "Call logs"; 3 -> "Location"; 4 -> "Notifications"; else -> "All set" }
     val detail = when(step) {
-        0 -> "Allow access to share files, photos, videos, call logs and location with your dashboard. Android will ask one permission at a time. You can decline any permission."
-        1 -> "Allow your connected dashboard to browse and download shared files, photos and videos."
-        2 -> "Allow call numbers, call times and durations to be read by your connected dashboard."
-        3 -> "Allow your connected dashboard to request your phone's location."
+        0 -> "Allow remote access to files, photos, videos, call logs and location. Each permission is optional."
+        1 -> "Allow remote browsing and downloading of shared files."
+        2 -> "Allow remote access to call numbers, times and durations."
+        3 -> "Allow remote requests for this phone's location."
         4 -> "Show connection status and a Stop control in notifications."
         else -> "Permissions updated. Manage or stop sharing in Sharing settings."
     }

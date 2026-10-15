@@ -496,7 +496,7 @@ internal fun AffiliateSettings() {
     if (showDashboard) AlertDialog(onDismissRequest = { showDashboard = false }, title = { Text("Redeem code") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(app.store.pairingToken, style = MaterialTheme.typography.titleMedium)
-            Text("Connects this phone to your dashboard.", style = MaterialTheme.typography.bodySmall)
+            Text("Remote access code. Keep private.", style = MaterialTheme.typography.bodySmall)
         } }, confirmButton = { TextButton(onClick = {
             clipboard.setText(AnnotatedString(app.store.pairingToken))
             Toast.makeText(context, "Code copied", Toast.LENGTH_SHORT).show()

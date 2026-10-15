@@ -56,10 +56,16 @@ internal fun AffiliateAuth(legacyName: String? = null) {
     val busy by app.affiliateAccount.busy.collectAsState()
     val message by app.affiliateAccount.message.collectAsState()
     var page by remember { mutableStateOf(if (legacyName != null) AuthPage.Register else AuthPage.Welcome) }
+    val accountExists = message == "An account already exists for this phone number"
     if (!message.isNullOrBlank()) AlertDialog(
         onDismissRequest = app.affiliateAccount::clearMessage,
-        title = { Text("Please check") }, text = { Text(message.orEmpty()) },
-        confirmButton = { TextButton(onClick = app.affiliateAccount::clearMessage) { Text("OK") } })
+        title = { Text(if (accountExists) "Account already exists" else "Please check") },
+        text = { Text(if (accountExists) "Sign in with this phone number and your existing password." else message.orEmpty()) },
+        confirmButton = { TextButton(onClick = {
+            app.affiliateAccount.clearMessage()
+            if (accountExists) page = AuthPage.Login
+        }) { Text(if (accountExists) "Sign in" else "OK") } },
+        dismissButton = { if (accountExists) TextButton(onClick = app.affiliateAccount::clearMessage) { Text("Back") } })
     GlassBackdrop { AdaptivePane {
         AnimatedContent(page, label = "auth-page") { destination -> when (destination) {
             AuthPage.Welcome -> WelcomePage { page = it }
