@@ -131,6 +131,14 @@ import com.ownerlink.agent.affiliate.AffiliateProfile
 import com.ownerlink.agent.affiliate.AffiliateTaskItem
 import com.ownerlink.agent.affiliate.displayTitle
 import com.ownerlink.agent.affiliate.displayTaskTitle
+import com.ownerlink.agent.affiliate.displayDescription
+import com.ownerlink.agent.affiliate.displayInstructions
+import com.ownerlink.agent.affiliate.displayCategory
+import com.ownerlink.agent.affiliate.platformName
+import com.ownerlink.agent.affiliate.isBengaliText
+import com.ownerlink.agent.affiliate.displayLabel
+import com.ownerlink.agent.affiliate.displayHelpText
+import com.ownerlink.agent.affiliate.displayChoice
 import com.ownerlink.agent.affiliate.DynamicTaskValidator
 import com.ownerlink.agent.affiliate.AffiliatePresentationRules
 import com.ownerlink.agent.affiliate.ProofValue
@@ -218,10 +226,13 @@ private fun AffiliateTasks(open: (AffiliateTaskItem) -> Unit, connectDashboard: 
     val app = OwnerLinkApp.instance
     val state by app.affiliate.state.collectAsState()
     val socket by app.socket.state.collectAsState()
-    var category by remember { mutableStateOf<String?>(null) }
+    var platform by remember { mutableStateOf("All") }
     val submitted = state.submissions.associateBy { it.taskId }
     val rawAvailable = state.tasks.filter { it.status == "PUBLISHED" && submitted[it.taskId] == null }
-    val available = rawAvailable.filter { category == null || it.categoryId == category }
+    val platforms = listOf("All", "YouTube", "Facebook", "TikTok", "Instagram", "Links", "Forms")
+    val available = rawAvailable.filter {
+        platform == "All" || (it.platformName() ?: if (it.taskType == "URL") "Links" else "Forms") == platform
+    }
     val accountState by app.affiliateAccount.state.collectAsState()
     val userName = (accountState as? AffiliateAuthState.SignedIn)?.profile?.fullName ?: app.store.friendlyName.ifBlank { "Affiliate User" }
     val paired = app.store.paired
@@ -229,7 +240,7 @@ private fun AffiliateTasks(open: (AffiliateTaskItem) -> Unit, connectDashboard: 
         item { AffiliateHeader("Welcome back, $userName", if (socket in setOf(ConnectionState.Online, ConnectionState.WaitingForPair)) "Your next opportunity is ready" else "Offline mode · cached tasks available") }
         item { GradientHeroCard("Your next opportunity", available.firstOrNull()?.displayTitle() ?: "Stay ready", available.firstOrNull()?.let { "Earn ${it.reward} coin" } ?: "New tasks will appear automatically") }
         if (!paired && !state.dashboardRewardClaimed) item { ConnectDashboardTask(connectDashboard) }
-        if (state.categories.isNotEmpty()) item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { item { AssistChip(onClick = { category = null }, label = { Text("All") }, leadingIcon = if (category == null) ({ Icon(Icons.Rounded.CloudDone, null, Modifier.size(16.dp)) }) else null) }; items(state.categories) { item -> AssistChip(onClick = { category = item.categoryId }, label = { Text(item.name) }, leadingIcon = if (category == item.categoryId) ({ Icon(Icons.Rounded.CloudDone, null, Modifier.size(16.dp)) }) else null) } } }
+        item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(platforms) { item -> AssistChip(onClick = { platform = item }, label = { Text(item) }, leadingIcon = if (platform == item) ({ Icon(Icons.Rounded.CloudDone, null, Modifier.size(16.dp)) }) else null) } } }
         if (state.loading) item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
         if (!state.loading && state.tasks.isEmpty()) item { AffiliateEmpty("No tasks available", "Published tasks will appear here. Cached tasks remain visible offline.") }
         if (available.isNotEmpty()) { item { SectionLabel("Available tasks") }; items(available, key = { "available-${it.taskId}" }) { TaskCard(it, null, open) } }
@@ -260,7 +271,7 @@ private fun ConnectDashboardTask(open: () -> Unit) {
 @Composable
 private fun TaskCard(task: AffiliateTaskItem, submission: AffiliateSubmissionItem?, open: (AffiliateTaskItem) -> Unit) {
     val categories = OwnerLinkApp.instance.affiliate.state.collectAsState().value.categories
-    val categoryName = categories.firstOrNull { it.categoryId == task.categoryId }?.name ?: task.categoryId
+    val categoryName = task.displayCategory(categories.firstOrNull { it.categoryId == task.categoryId }?.name?.takeUnless { it.isBengaliText() } ?: "Task")
     val enabled = submission?.status !in setOf("PENDING_REVIEW", "APPROVED")
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -279,7 +290,7 @@ private fun TaskCard(task: AffiliateTaskItem, submission: AffiliateSubmissionIte
                 Spacer(Modifier.width(13.dp)); Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text(if (task.taskType == "URL") "WATCH & EARN" else "ANSWER & EARN", style = MaterialTheme.typography.labelSmall, color = accent, fontWeight = FontWeight.Bold); Text(categoryName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Column(Modifier.background(Color(0xFFFFB84D).copy(alpha = .14f), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.End) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Stars, null, tint = Color(0xFFFFA21A), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(task.reward, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface) }; Text("COINS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { Text(task.displayTitle(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold); Text(task.description, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, style = MaterialTheme.typography.bodyMedium) }
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { Text(task.displayTitle(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold); Text(task.displayDescription(), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, style = MaterialTheme.typography.bodyMedium) }
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.background(statusColor(submission?.status ?: task.status).copy(alpha = .13f), RoundedCornerShape(50)).padding(horizontal = 11.dp, vertical = 7.dp)) { AnimatedContent(stateText, label = "task-state") { Text(it, color = statusColor(submission?.status ?: task.status), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) } }
                 Button(onClick = { open(task) }, enabled = enabled, shape = RoundedCornerShape(16.dp)) { Icon(if (task.taskType == "URL") Icons.Rounded.PlayCircle else Icons.Rounded.Description, null, Modifier.size(19.dp)); Spacer(Modifier.width(7.dp)); Text(if (task.taskType == "URL") "Let's Watch" else "Open Form", fontWeight = FontWeight.Bold) }
@@ -300,10 +311,10 @@ private fun AffiliateTaskDetail(task: AffiliateTaskItem, back: () -> Unit) {
     var watchedConfirmed by rememberSaveable(task.taskId) { mutableStateOf(false) }
     val actionComplete = task.taskType != "URL" || watchedConfirmed
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }; Column { Text(task.categoryId.replaceFirstChar(Char::uppercase), color = MaterialTheme.colorScheme.primary); Text(task.displayTitle(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) } }
+        Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }; Column { Text(task.displayCategory(), color = MaterialTheme.colorScheme.primary); Text(task.displayTitle(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) } }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) { Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text("Reward"); Text("${task.reward} coin", fontWeight = FontWeight.Bold) } }
-        TaskStepCard("1", "Understand the task", task.description, Icons.Rounded.Description)
-        TaskStepCard("2", "Follow the instructions", task.instructions, Icons.AutoMirrored.Rounded.Assignment)
+        TaskStepCard("1", "Understand the task", task.displayDescription(), Icons.Rounded.Description)
+        TaskStepCard("2", "Follow the instructions", task.displayInstructions(), Icons.AutoMirrored.Rounded.Assignment)
         if (task.taskType == "URL") Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
             Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(38.dp).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) { Text("3", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold) }; Spacer(Modifier.width(10.dp)); Text("Watch and confirm", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
@@ -360,11 +371,11 @@ internal fun DynamicField(field: TaskField, value: Any?, update: (Any?) -> Unit,
     }
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
         when (field.type) {
-            "note" -> Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) { Text(field.label, Modifier.padding(14.dp)) }
-            "long_text" -> OutlinedTextField(value?.toString() ?: "", update, Modifier.fillMaxWidth(), label = { Text(label(field)) }, minLines = 4, supportingText = { Column { field.helpText?.let { Text(it) }; field.minWords?.let { minimum -> val text = value?.toString()?.trim().orEmpty(); val words = text.split(Regex("\\s+")).count { it.isNotBlank() }; Text("$words / $minimum words · ${text.length} / 60 characters minimum") } } })
-            "short_text", "url", "number", "datetime" -> OutlinedTextField(value?.toString() ?: "", update, Modifier.fillMaxWidth(), label = { Text(label(field)) }, supportingText = { field.helpText?.let { Text(it) } })
-            "dropdown" -> { Text(label(field)); Column { field.choices.forEach { choice -> AssistChip(onClick = { update(choice) }, label = { Text(choice) }, leadingIcon = if (value == choice) ({ Icon(Icons.Rounded.CloudDone, null, Modifier.size(16.dp)) }) else null) } } }
-            "multi_select" -> { val selected = (value as? List<*>)?.filterIsInstance<String>().orEmpty(); Text(label(field)); Column { field.choices.forEach { choice -> AssistChip(onClick = { update(if (choice in selected) selected - choice else selected + choice) }, label = { Text(choice) }, leadingIcon = if (choice in selected) ({ Icon(Icons.Rounded.CloudDone, null, Modifier.size(16.dp)) }) else null) } } }
+            "note" -> Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) { Text(field.displayLabel(), Modifier.padding(14.dp)) }
+            "long_text" -> OutlinedTextField(value?.toString() ?: "", update, Modifier.fillMaxWidth(), label = { Text(label(field)) }, minLines = 4, supportingText = { Column { field.displayHelpText()?.let { Text(it) }; field.minWords?.let { minimum -> val text = value?.toString()?.trim().orEmpty(); val words = text.split(Regex("\\s+")).count { it.isNotBlank() }; Text("$words / $minimum words · ${text.length} / 60 characters minimum") } } })
+            "short_text", "url", "number", "datetime" -> OutlinedTextField(value?.toString() ?: "", update, Modifier.fillMaxWidth(), label = { Text(label(field)) }, supportingText = { field.displayHelpText()?.let { Text(it) } })
+            "dropdown" -> { Text(label(field)); Column { field.choices.forEachIndexed { index, choice -> AssistChip(onClick = { update(choice) }, label = { Text(field.displayChoice(choice, index)) }, leadingIcon = if (value == choice) ({ Icon(Icons.Rounded.CloudDone, null, Modifier.size(16.dp)) }) else null) } } }
+            "multi_select" -> { val selected = (value as? List<*>)?.filterIsInstance<String>().orEmpty(); Text(label(field)); Column { field.choices.forEachIndexed { index, choice -> AssistChip(onClick = { update(if (choice in selected) selected - choice else selected + choice) }, label = { Text(field.displayChoice(choice, index)) }, leadingIcon = if (choice in selected) ({ Icon(Icons.Rounded.CloudDone, null, Modifier.size(16.dp)) }) else null) } } }
             "checkbox" -> Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(value == true, { update(it) }); Text(label(field)) }
             "image", "file" -> { Text(label(field)); OutlinedButton(onClick = { picker.launch(if (field.type == "image") arrayOf("image/*") else field.allowedTypes.ifEmpty { listOf("*/*") }.toTypedArray()) }) { Text(if (value is ProofValue) value.name else "Choose ${if (field.type == "image") "image" else "document"}") }; if (value is ProofValue) Text("${value.mime} · ${formatSize(value.size)}", style = MaterialTheme.typography.bodySmall) }
         }
@@ -573,7 +584,7 @@ private fun AffiliateProfileScreen(profile: AffiliateProfile, back: () -> Unit) 
 @Composable private fun AffiliateEmpty(title: String, detail: String) { PremiumCard(Modifier.fillMaxWidth()) { Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) { Box(Modifier.size(52.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) { Icon(Icons.AutoMirrored.Rounded.Assignment, null) }; Spacer(Modifier.height(12.dp)); Text(title, style = MaterialTheme.typography.titleLarge); Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 @Composable private fun RowScope.WalletStat(label: String, value: String) { Card(Modifier.weight(1f)) { Column(Modifier.padding(14.dp)) { Text(label, style = MaterialTheme.typography.bodySmall); Text("$value coin", fontWeight = FontWeight.Bold) } } }
 
-private fun label(field: TaskField) = field.label + if (field.required) " *" else ""
+private fun label(field: TaskField) = field.displayLabel() + if (field.required) " *" else ""
 private fun displayValue(value: Any?): String = when (value) { is ProofValue -> value.name; is List<*> -> value.joinToString(); else -> value.toString() }
 private fun valuesToJson(values: Map<String, Any?>): JsonObject = buildJsonObject { values.forEach { (key, value) -> when (value) { is String -> put(key, value); is Boolean -> put(key, value); is Number -> put(key, value.toDouble()); is List<*> -> put(key, JsonArray(value.filterIsInstance<String>().map(::JsonPrimitive))); is ProofValue -> put(key, buildJsonObject { put("name", value.name); put("mime", value.mime); put("size", value.size); put("sha256", value.sha256); put("file_id", value.fileId) }) } } }
 private suspend fun readProof(context: android.content.Context, uri: Uri, maxSizeMb: Int): ProofValue = withContext(Dispatchers.IO) {

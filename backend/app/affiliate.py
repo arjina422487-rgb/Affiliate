@@ -728,7 +728,9 @@ class AffiliateService:
         full = cursor <= 0 or cursor > current_cursor
         submissions = self.submissions(user_id=user_id, device_id=device_id)
         submitted_task_ids = {row["task_id"] for row in submissions}
-        candidates = [row for row in self.tasks() if row["status"] != "DRAFT"
+        # Only published entries participate in sequence progression. A paused,
+        # closed, or archived first entry must not hide a later live task.
+        candidates = [row for row in self.tasks() if row["status"] == "PUBLISHED"
                       and eligible(row, user_id, device_id, int(user.get("quality_score", 100)), groups, str(user.get("gender") or ""))]
         next_by_sequence: dict[str, dict[str, Any]] = {}
         for row in candidates:

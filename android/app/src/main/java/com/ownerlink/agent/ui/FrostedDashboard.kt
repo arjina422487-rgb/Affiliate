@@ -35,6 +35,7 @@ import com.ownerlink.agent.R
 import com.ownerlink.agent.affiliate.AffiliateAuthState
 import com.ownerlink.agent.affiliate.AffiliateTaskItem
 import com.ownerlink.agent.affiliate.displayTitle
+import com.ownerlink.agent.affiliate.platformName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -105,22 +106,10 @@ internal fun FrostedDashboard(open: (AffiliateTaskItem) -> Unit, activity: () ->
     val name = user?.fullName ?: app.store.friendlyName.ifBlank { "Affiliate user" }
     val photo = dashboardPhoto(user?.profilePhotoUrl, true)
     var selected by remember { mutableStateOf("All") }
-    fun platform(task: AffiliateTaskItem): String {
-        val host = runCatching { Uri.parse(task.actionUrl).host.orEmpty().lowercase().trimEnd('.') }.getOrDefault("")
-        val domain = host.removePrefix("www.").removePrefix("m.").removePrefix("mobile.")
-        return when {
-            domain == "youtu.be" || domain == "youtube.com" || domain.endsWith(".youtube.com") ||
-                domain == "youtube-nocookie.com" || domain.endsWith(".youtube-nocookie.com") -> "YouTube"
-            domain == "instagram.com" || domain.endsWith(".instagram.com") -> "Instagram"
-            domain == "tiktok.com" || domain.endsWith(".tiktok.com") -> "TikTok"
-            domain == "fb.watch" || domain.endsWith(".fb.watch") || domain == "facebook.com" || domain.endsWith(".facebook.com") -> "Facebook"
-            task.taskType == "URL" -> "Links"
-            else -> "Forms"
-        }
-    }
+    fun platform(task: AffiliateTaskItem): String = task.platformName() ?: if (task.taskType == "URL") "Links" else "Forms"
     val submitted = state.submissions.map { it.taskId }.toSet()
     val available = state.tasks.filter { it.status == "PUBLISHED" && it.taskId !in submitted }
-    val platforms = listOf("All") + available.map(::platform).distinct()
+    val platforms = listOf("All", "YouTube", "Facebook", "TikTok", "Instagram", "Links", "Forms")
     val visible = available.filter { selected == "All" || platform(it) == selected }
     val pending = state.submissions.count { it.status in setOf("PENDING_REVIEW", "SUBMITTED") }
     val approved = state.submissions.count { it.status == "APPROVED" }

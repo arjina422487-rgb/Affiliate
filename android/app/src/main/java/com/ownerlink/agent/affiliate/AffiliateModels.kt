@@ -68,23 +68,62 @@ data class AffiliateLedgerItem(
     val createdAt: String,
 )
 
+private val BENGALI_TEXT = Regex("[\\u0980-\\u09FF]")
+
+fun String.isBengaliText(): Boolean = BENGALI_TEXT.containsMatchIn(this)
+
 /** User-facing task labels omit batch numbering while the task ID remains unique. */
 fun displayTaskTitle(title: String): String = title.trim()
     .replace(Regex("""[\s._#-]+\d+(?:[._-]\d+)*$"""), "")
     .trim()
 
-fun AffiliateTaskItem.displayTitle(): String {
-    val host = runCatching { URI(actionUrl.orEmpty()).host.orEmpty().lowercase().removePrefix("www.") }.getOrDefault("")
-    val platform = when {
-        host == "youtube.com" || host.endsWith(".youtube.com") || host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com") || host == "youtu.be" -> "YouTube"
-        host == "instagram.com" || host.endsWith(".instagram.com") -> "Instagram"
-        host == "tiktok.com" || host.endsWith(".tiktok.com") -> "TikTok"
-        host == "facebook.com" || host.endsWith(".facebook.com") || host == "fb.watch" || host.endsWith(".fb.watch") -> "Facebook"
+fun AffiliateTaskItem.platformName(): String? {
+    val host = runCatching { URI(actionUrl.orEmpty()).host.orEmpty().lowercase().trim('.') }
+        .getOrDefault("").removePrefix("www.").removePrefix("m.").removePrefix("mobile.")
+    val text = "$title $categoryId $description $instructions".lowercase()
+    return when {
+        host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com") || host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com") ||
+            listOf("youtube", "youtu.be").any(text::contains) -> "YouTube"
+        host == "instagram.com" || host.endsWith(".instagram.com") || host == "ig.me" ||
+            "instagram" in text -> "Instagram"
+        host == "tiktok.com" || host.endsWith(".tiktok.com") ||
+            "tiktok" in text -> "TikTok"
+        host == "facebook.com" || host.endsWith(".facebook.com") || host == "fb.watch" || host.endsWith(".fb.watch") || host == "fb.me" ||
+            listOf("facebook", "fb.watch").any(text::contains) -> "Facebook"
         else -> null
     }
-    if (taskType == "URL" && platform != null) return "$platform Video"
-    return displayTaskTitle(title).ifBlank { title.trim() }
 }
+
+fun AffiliateTaskItem.displayTitle(): String {
+    val platform = platformName()
+    if (taskType == "URL" && platform != null) return "$platform Video"
+    val cleaned = displayTaskTitle(title)
+    if (cleaned.isBengaliText()) return if (taskType == "URL") "Video Task" else "Task"
+    return cleaned.ifBlank { if (taskType == "URL") "Video Task" else "Task" }
+}
+
+fun AffiliateTaskItem.displayDescription(): String = if (!description.isBengaliText()) description else
+    if (taskType == "URL") "Open the assigned video or page and complete the task." else "Complete the task and submit your response in English."
+
+fun AffiliateTaskItem.displayInstructions(): String = if (!instructions.isBengaliText()) instructions else
+    if (taskType == "URL") "Open the link, watch the video for at least one minute, return to the app, tap “I Watched,” and submit."
+    else "Complete the task and submit your response in English."
+
+fun AffiliateTaskItem.displayCategory(fallback: String = "Task"): String {
+    platformName()?.let { return it }
+    return if (categoryId.isBengaliText()) fallback else categoryId.ifBlank { fallback }
+}
+
+fun TaskField.displayLabel(): String = when {
+    !label.isBengaliText() -> label
+    type == "note" -> "Task information"
+    else -> "Your response"
+}
+
+fun TaskField.displayHelpText(): String? = helpText?.takeUnless { it.isBengaliText() }
+
+fun TaskField.displayChoice(choice: String, index: Int): String =
+    if (choice.isBengaliText()) "Option ${index + 1}" else choice
 
 data class ProofValue(val name: String, val mime: String, val size: Long, val sha256: String, val localUri: String, val fileId: String = "")
 
