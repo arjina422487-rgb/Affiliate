@@ -869,8 +869,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/tasks/import")
     async def api_import_task(request: Request):
-        auth, body = await affiliate_admin_body(request)
+        auth = require_api_owner(request)
         if isinstance(auth, JSONResponse): return auth
+        try:
+            raw_body = await request.json()
+        except Exception:
+            return json_error("Expected a task JSON object or array", "BAD_REQUEST", 400)
+        try:
+            parse_csrf_from_form(raw_body.get("csrf_token") if isinstance(raw_body, dict) else None, request)
+        except HTTPException:
+            return json_error("Invalid CSRF token", "CSRF", 403)
+        if isinstance(raw_body, list):
+            if not 1 <= len(raw_body) <= 100:
+                return json_error("A task file must contain between 1 and 100 entries", "INVALID_IMPORT")
+            if any(not isinstance(item, dict) or str(item.get("version") or "") != "1"
+                   or not isinstance(item.get("category"), dict) or not isinstance(item.get("task"), dict)
+                   for item in raw_body):
+                return json_error("Each array entry must contain version 1, category, and task objects", "INVALID_IMPORT")
+            category_raw = raw_body[0]["category"]
+            category_key = (str(category_raw.get("name") or "").strip().casefold(),
+                            str(category_raw.get("description") or "").strip())
+            if any((str(item["category"].get("name") or "").strip().casefold(),
+                    str(item["category"].get("description") or "").strip()) != category_key for item in raw_body[1:]):
+                return json_error("All entries in an array import must use the same category", "INVALID_IMPORT")
+            task_rows = [dict(item["task"]) for item in raw_body]
+            title_counts: dict[str, int] = {}
+            for task in task_rows:
+                title = str(task.get("title") or "").strip()
+                if title:
+                    title_counts[title.casefold()] = title_counts.get(title.casefold(), 0) + 1
+            for index, task in enumerate(task_rows, start=1):
+                title = str(task.get("title") or "").strip()
+                if title and title_counts.get(title.casefold(), 0) > 1:
+                    task["title"] = f"{title} {index:02d}"
+            body = {"version": 1, "category": category_raw,
+                    "series": {"name": category_raw.get("name") or "Imported tasks"}, "tasks": task_rows}
+        elif isinstance(raw_body, dict):
+            raw_body.pop("csrf_token", None)
+            body = raw_body
+        else:
+            return json_error("Expected a task JSON object or array", "BAD_REQUEST", 400)
         if not isinstance(body, dict) or int(body.get("version") or 0) != 1:
             return json_error("Task JSON version must be 1", "INVALID_IMPORT")
         category_raw = body.get("category")

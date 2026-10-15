@@ -105,12 +105,14 @@ internal fun FrostedDashboard(open: (AffiliateTaskItem) -> Unit, activity: () ->
     val photo = dashboardPhoto(user?.profilePhotoUrl, true)
     var selected by remember { mutableStateOf("All") }
     fun platform(task: AffiliateTaskItem): String {
-        val host = runCatching { Uri.parse(task.actionUrl).host.orEmpty().lowercase() }.getOrDefault("")
+        val host = runCatching { Uri.parse(task.actionUrl).host.orEmpty().lowercase().trimEnd('.') }.getOrDefault("")
+        val domain = host.removePrefix("www.").removePrefix("m.").removePrefix("mobile.")
         return when {
-            host == "youtu.be" || host.endsWith("youtube.com") -> "YouTube"
-            host.endsWith("instagram.com") -> "Instagram"
-            host.endsWith("tiktok.com") -> "TikTok"
-            host.endsWith("facebook.com") -> "Facebook"
+            domain == "youtu.be" || domain == "youtube.com" || domain.endsWith(".youtube.com") ||
+                domain == "youtube-nocookie.com" || domain.endsWith(".youtube-nocookie.com") -> "YouTube"
+            domain == "instagram.com" || domain.endsWith(".instagram.com") -> "Instagram"
+            domain == "tiktok.com" || domain.endsWith(".tiktok.com") -> "TikTok"
+            domain == "fb.watch" || domain.endsWith(".fb.watch") || domain == "facebook.com" || domain.endsWith(".facebook.com") -> "Facebook"
             task.taskType == "URL" -> "Links"
             else -> "Forms"
         }
