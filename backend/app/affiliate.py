@@ -746,17 +746,32 @@ class AffiliateService:
         # closed, or archived first entry must not hide a later live task.
         candidates = [row for row in self.tasks() if row["status"] == "PUBLISHED"
                       and eligible(row, user_id, device_id, int(user.get("quality_score", 100)), groups, str(user.get("gender") or ""))]
-        next_by_sequence: dict[tuple[str, str], dict[str, Any]] = {}
+        sequence_heads: dict[tuple[str, str], dict[str, Any]] = {}
+        unsequenced: list[dict[str, Any]] = []
         for row in candidates:
+            if row["task_id"] in submitted_task_ids:
+                continue
             sequence_id = row.get("sequence_id")
-            if not sequence_id or row["task_id"] in submitted_task_ids:
+            if not sequence_id:
+                unsequenced.append(row)
                 continue
             sequence_key = (sequence_id, _sequence_platform(row))
-            current_task = next_by_sequence.get(sequence_key)
+            current_task = sequence_heads.get(sequence_key)
             if current_task is None or int(row.get("sequence_order", 0)) < int(current_task.get("sequence_order", 0)):
-                next_by_sequence[sequence_key] = row
-        visible_ids = {row["task_id"] for row in candidates if not row.get("sequence_id")}
-        visible_ids.update(row["task_id"] for row in next_by_sequence.values())
+                sequence_heads[sequence_key] = row
+
+        # A platform has one queue across all imports, not one visible item per
+        # batch. Otherwise two JSON batches can surface duplicate TikTok cards
+        # while hiding YouTube/Facebook tasks later in the same platform feed.
+        platform_heads: dict[str, dict[str, Any]] = {}
+        for row in [*sequence_heads.values(), *unsequenced]:
+            platform = _sequence_platform(row)
+            current_task = platform_heads.get(platform)
+            queue_order = (str(row.get("created_at") or ""), int(row.get("sequence_order", 0)), row["task_id"])
+            current_order = (str(current_task.get("created_at") or ""), int(current_task.get("sequence_order", 0)), current_task["task_id"]) if current_task else None
+            if current_order is None or queue_order < current_order:
+                platform_heads[platform] = row
+        visible_ids = {row["task_id"] for row in platform_heads.values()}
         task_rows = [row for row in candidates if row["task_id"] in visible_ids
                      and (full or int(row.get("revision", 0)) > cursor)]
         ledger = self.ledger(user_id=user_id, limit=100)
