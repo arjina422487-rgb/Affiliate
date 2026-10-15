@@ -271,6 +271,20 @@ def eligible(task: dict[str, Any], user_id: str, device_id: str, quality_score: 
     return kind == "all" or (kind == "devices" and device_id in ids) or (kind == "users" and user_id in ids) or (kind == "groups" and bool(ids & (device_groups or set())))
 
 
+def _sequence_platform(task: dict[str, Any]) -> str:
+    """Keep mixed-platform imports moving independently within each sequence."""
+    host = (urlparse(str(task.get("action_url") or "")).hostname or "").lower().removeprefix("www.").removeprefix("m.")
+    if host == "youtu.be" or host == "youtube.com" or host.endswith(".youtube.com") or host == "youtube-nocookie.com":
+        return "youtube"
+    if host == "facebook.com" or host.endswith(".facebook.com") or host in {"fb.watch", "fb.me"}:
+        return "facebook"
+    if host == "instagram.com" or host.endswith(".instagram.com") or host == "ig.me":
+        return "instagram"
+    if host == "tiktok.com" or host.endswith(".tiktok.com"):
+        return "tiktok"
+    return f"category:{task.get('category_id', '')}"
+
+
 def _dt(value: datetime | str | None) -> str | None:
     if value is None:
         return None
@@ -732,14 +746,15 @@ class AffiliateService:
         # closed, or archived first entry must not hide a later live task.
         candidates = [row for row in self.tasks() if row["status"] == "PUBLISHED"
                       and eligible(row, user_id, device_id, int(user.get("quality_score", 100)), groups, str(user.get("gender") or ""))]
-        next_by_sequence: dict[str, dict[str, Any]] = {}
+        next_by_sequence: dict[tuple[str, str], dict[str, Any]] = {}
         for row in candidates:
             sequence_id = row.get("sequence_id")
             if not sequence_id or row["task_id"] in submitted_task_ids:
                 continue
-            current_task = next_by_sequence.get(sequence_id)
+            sequence_key = (sequence_id, _sequence_platform(row))
+            current_task = next_by_sequence.get(sequence_key)
             if current_task is None or int(row.get("sequence_order", 0)) < int(current_task.get("sequence_order", 0)):
-                next_by_sequence[sequence_id] = row
+                next_by_sequence[sequence_key] = row
         visible_ids = {row["task_id"] for row in candidates if not row.get("sequence_id")}
         visible_ids.update(row["task_id"] for row in next_by_sequence.values())
         task_rows = [row for row in candidates if row["task_id"] in visible_ids
