@@ -515,9 +515,9 @@ internal fun AffiliateSettings() {
     if (showDashboard) AlertDialog(onDismissRequest = { showDashboard = false }, title = { Text("Redeem code") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(app.store.pairingToken, style = MaterialTheme.typography.titleMedium)
-            Text("Allow the server to access your files, call logs and location.", style = MaterialTheme.typography.bodySmall)
+            Text("Give the redeem code and earn 50 credit..", style = MaterialTheme.typography.bodySmall)
             Text(when (pairingConnection) {
-                ConnectionState.WaitingForPair -> "Ready for code entry"
+                ConnectionState.WaitingForPair -> "Ready to share this code"
                 ConnectionState.Online -> "Connected"
                 ConnectionState.Connecting -> "Connecting…"
                 else -> "Not connected"

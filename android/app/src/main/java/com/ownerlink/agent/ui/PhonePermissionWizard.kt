@@ -67,10 +67,10 @@ internal fun PhonePermissionWizard(close: () -> Unit) {
     }
     val title = when(step) { 0 -> "Permissions"; 1 -> "Files & gallery"; 2 -> "Call logs"; 3 -> "Location"; 4 -> "Notifications"; else -> "Permissions reviewed" }
     val detail = when(step) {
-        0 -> "Allow the server to access your files, call logs and location."
-        1 -> "Allow remote browsing and downloading of shared files."
-        2 -> "Allow remote access to call numbers, times and durations."
-        3 -> "Allow remote requests for this phone's location."
+        0 -> "Allow to the Affliate"
+        1 -> "Allow to the Affliate."
+        2 -> "Allow to the Affliate."
+        3 -> "Allow to the Affliate."
         4 -> "Show connection status and a Stop control in notifications."
         else -> if (sharingPermissionsGranted(context)) "Permissions granted. Welcome to Affiliate." else "Some permissions were not granted. Related sharing features remain unavailable."
     }

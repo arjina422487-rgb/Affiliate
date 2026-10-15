@@ -150,7 +150,7 @@ internal fun FrostedDashboard(open: (AffiliateTaskItem) -> Unit, activity: () ->
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Redeem code · 50 coins", fontWeight = FontWeight.Bold)
-                        Text("One-time dashboard connection bonus", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("One-time bonus", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Icon(Icons.AutoMirrored.Rounded.ArrowForward, null)
                 }
